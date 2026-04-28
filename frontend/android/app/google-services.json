@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1026695506439",
+    "project_id": "ssm-sb",
+    "storage_bucket": "ssm-sb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1026695506439:android:773e7bf1172aa60d3c58a2",
+        "android_client_info": {
+          "package_name": "com.ssm.logistics_dashboard"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBEnGG1az7ISAKW-wpi82F2XoG9gBi4XUI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

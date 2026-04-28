@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+.dart_tool/
+.pub-cache/
+build/
+.gradle/
+.kotlin/
+
+# Secrets and local configuration
+.env
+serviceAccountKey.json
+local.properties
+frontend/android/local.properties
+*.pem
+*.key
+
+# Logs and generated runtime output
+*.log
+npm-debug.log*
+*.tmp
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.iml
+
+test
