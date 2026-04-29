@@ -40,7 +40,9 @@ const analyzeShipment = async (req, res) => {
     const payload = {
       routeData: lightRouteData,
       weatherData,
-      newsData
+      newsData,
+      source: shipment.origin,
+      currentLocation: shipment.current_location || null
     };
 
     // 4. Critical Runtime Debugging

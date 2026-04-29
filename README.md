@@ -1,170 +1,209 @@
-# Smart Supply Chain Management MVP
+# 🚚 Smart Supply Chain Management MVP
 
-An AI-driven logistics decision engine that tracks a simulated shipment, collects live route/weather/news signals, predicts delay and risk, and stores the latest shipment intelligence in Firebase for a live dashboard.
+An AI-driven logistics decision engine designed for the **Google Solution Challenge 2026**. This platform provides real-time shipment tracking, predictive risk assessment, and intelligent route optimization by aggregating data from Google Maps, Weather, and News APIs.
 
-## Problem Definition
+---
 
-Logistics teams often react to delivery delays after they have already affected customers. Traffic congestion, weather changes, route disruptions, and poor visibility make it difficult for dispatchers to understand shipment risk early enough to act.
+## 🌟 Overview
 
-This prototype addresses that gap by combining live shipment movement, real-world context, and AI reasoning into one operational dashboard.
+The **Smart Supply Chain Management** platform solves the visibility gap in modern logistics. Instead of just showing a dot on a map, it provides **contextual intelligence**. It answers not just *where* a shipment is, but *why* it might be delayed and *what* the driver should do about it.
 
-## Solution
+### 🔄 Continuous Monitoring Loop
+The platform operates on a closed-loop system to ensure constant reliability:
+1.  **Monitor**: Continuous tracking of vehicle coordinates via the simulator/GPS.
+2.  **Analyze**: Real-time correlation with weather alerts and traffic congestion.
+3.  **Optimize**: Automated re-routing suggestions if the current path becomes high-risk.
+4.  **Notify**: Instant push notifications via FCM for critical disruptions.
+5.  **Update**: Real-time Firestore sync ensures the UI reflects the latest intelligence.
 
-The system continuously tracks shipment status and uses external data to produce a live risk assessment:
+### Core Value Proposition
+- **Live Risk Scoring**: Combines traffic congestion, weather severity, and local news (accidents, strikes) into a single 0-1 risk score.
+- **AI Reasoning**: Uses Gemini (Vertex AI) to generate human-readable operational recommendations.
+- **Dynamic Optimization**: Re-calculates risks and routes from the vehicle's **live location**, not just the starting point.
+- **Glassmorphism UI**: A premium, modern Flutter dashboard designed for professional dispatchers.
 
-- Google Maps route and traffic duration.
-- OpenWeather destination weather.
-- NewsAPI contextual disruption signals.
-- Gemini via a Python AI service for a short delay/risk explanation.
-- Firebase Firestore for live shipment storage.
-- Browser dashboard for operators to create, analyze, and monitor shipments.
+---
 
-## Expected Impact
+## 🏗️ System Architecture
 
-For dispatchers and small logistics operators, the prototype can reduce uncertainty by showing:
-
-- Where the shipment is.
-- Whether the route is risky.
-- How much delay is expected.
-- Why the delay is happening.
-- What action should be taken next.
-
-## Architecture
+The system follows a microservices-inspired architecture to separate data ingestion (Node.js) from intelligence generation (Python).
 
 ```mermaid
-flowchart LR
-  Dashboard["Dashboard UI"] --> Gateway["Node API Gateway"]
-  Simulator["Route Simulator"] --> Gateway
-  Gateway --> Firestore["Firebase Firestore"]
-  Gateway --> Maps["Google Maps"]
-  Gateway --> Weather["OpenWeather"]
-  Gateway --> News["NewsAPI"]
-  Gateway --> AI["Python FastAPI AI Service"]
-  AI --> Gemini["Gemini / Vertex AI"]
+graph TD
+    subgraph L1 ["1. CLIENT LAYER (Flutter)"]
+        Dashboard["Shipment Dashboard"]
+        LiveMap["Interactive Traffic Map"]
+        AlertsUI["Risk Alert System"]
+    end
+
+    subgraph L2 ["2. API GATEWAY LAYER (Node.js)"]
+        RequestHandling["Request Validation"]
+        Orchestration["Service Orchestration"]
+    end
+
+    subgraph L3 ["3. DATA INTEGRATION LAYER"]
+        MapsAPI["Google Maps (Traffic/Routes)"]
+        WeatherAPI["OpenWeather (Conditions)"]
+        NewsAPI["NewsAPI (Disruptions)"]
+    end
+
+    subgraph L4 ["4. INTELLIGENCE & DECISION LAYER (Python)"]
+        Router["Decision Router"]
+        RuleEngine["Deterministic Rules"]
+        GeminiAI["Gemini AI (Reasoning)"]
+        RiskEngine["Risk Scoring Engine"]
+    end
+
+    subgraph L5 ["5. DATA & STATE MANAGEMENT"]
+        Firestore["Firebase Firestore (Real-time DB)"]
+    end
+
+    subgraph L6 ["6. NOTIFICATION & DELIVERY"]
+        FCM["Firebase Cloud Messaging"]
+    end
+
+    L1 <--> L2
+    L2 --> L3
+    L2 <--> L4
+    L2 <--> L5
+    L5 -.->|Real-time Sync| L1
+    L4 --> RiskEngine
+    RiskEngine --> L2
+    L2 --> L6
 ```
 
-## Project Structure
+---
+
+## 🚀 Tech Stack
+
+| Layer | Technology |
+|---|---|
+| **Frontend** | Flutter (Dart), Google Maps Flutter, Provider (State Mgmt) |
+| **API Gateway** | Node.js, Express.js, Firebase Admin SDK |
+| **AI Engine** | Python 3.11+, FastAPI, Google GenAI SDK |
+| **Database** | Firebase Firestore |
+| **Infrastructure** | Vertex AI, Google Cloud Platform |
+
+---
+
+## 📂 Project Structure
 
 ```text
-backend/
-  api-gateway/
-    index.js
-    simulator.js
-    public/
-      index.html
-      styles.css
-      app.js
-    controllers/
-    routes/
-    services/
-    utils/
-  ai-service/
-    main.py
-    requirements.txt
+smart-supply-chain-management/
+├── backend/
+│   ├── api-gateway/          # Express.js Server
+│   │   ├── controllers/      # Business logic (Shipment analysis)
+│   │   ├── services/         # API wrappers (Maps, Weather, News)
+│   │   ├── routes/           # Endpoint definitions
+│   │   ├── simulator.js      # Vehicle movement simulator
+│   │   └── index.js          # Entry point
+│   └── ai-service/           # Python FastAPI Server
+│       └── main.py           # Risk logic & Gemini integration
+├── frontend/                 # Flutter Application
+│   ├── lib/
+│   │   ├── models/           # Data structures
+│   │   ├── modules/          # Screen-based features (Dashboard, Map)
+│   │   ├── controllers/      # Frontend state logic
+│   │   └── widgets/          # Reusable UI components
+└── README.md
 ```
 
-## Setup
+---
 
-### API Gateway
+## 🛠️ Setup & Installation
 
+### 1. Prerequisites
+- [Flutter SDK](https://docs.flutter.dev/get-started/install)
+- [Node.js](https://nodejs.org/) (v18+)
+- [Python](https://www.python.org/) (3.10+)
+- A Google Cloud Project with Vertex AI enabled
+- API Keys for: Google Maps, OpenWeather, and NewsAPI.org
+
+### 2. Backend - API Gateway
 ```bash
 cd backend/api-gateway
 npm install
-copy .env.example .env
-npm start
 ```
-
-Set these values in `.env`:
-
-```text
+Create a `.env` file:
+```env
 PORT=5000
-GOOGLE_MAPS_API_KEY=...
-WEATHER_API_KEY=...
-NEWS_API_KEY=...
+GOOGLE_MAPS_API_KEY=your_key
+WEATHER_API_KEY=your_key
+NEWS_API_KEY=your_key
 AI_SERVICE_URL=http://localhost:8000/predict
 ```
+*Note: Place your `serviceAccountKey.json` from Firebase in this folder.*
 
-Place the Firebase Admin SDK key at:
-
-```text
-backend/api-gateway/serviceAccountKey.json
-```
-
-Do not commit `.env` or `serviceAccountKey.json`.
-
-### AI Service
-
+### 3. Backend - AI Service
 ```bash
 cd backend/ai-service
 python -m venv venv
-venv\Scripts\pip install -r requirements.txt
-venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000
+venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+```
+*Note: Ensure you have `gcloud auth application-default login` configured.*
+
+### 4. Frontend - Flutter
+```bash
+cd frontend
+flutter pub get
 ```
 
-The AI service uses Google application credentials with Vertex AI access.
+---
 
-## Running The Prototype
+## 🚦 How to Run the Demo
 
-1. Start the Python AI service on port `8000`.
-2. Start the Node API gateway on port `5000`.
-3. Open `http://localhost:5000`.
-4. Create a shipment.
-5. Click `Analyze`.
-6. Click `Start Demo` to move the shipment along the route.
+1.  **Start AI Service**: 
+    ```bash
+    cd backend/ai-service
+    uvicorn main:app --port 8000
+    ```
+2.  **Start API Gateway**: 
+    ```bash
+    cd backend/api-gateway
+    npm start
+    ```
+3.  **Start Simulator**:
+    ```bash
+    cd backend/api-gateway
+    node simulator.js
+    ```
+4.  **Run Flutter**: 
+    ```bash
+    cd frontend
+    flutter run -d chrome  # or your preferred emulator
+    ```
 
-## Main API Endpoints
+---
 
-| Method | Endpoint | Purpose |
+## 📡 API Reference
+
+| Endpoint | Method | Description |
 |---|---|---|
-| GET | `/health` | Gateway health check |
-| GET | `/api/shipments` | List recent shipments |
-| GET | `/api/shipments/:shipment_id` | Get one shipment |
-| POST | `/create-shipment` | Create shipment |
-| POST | `/update-location` | Update live coordinates |
-| POST | `/api/shipments/analyze` | Fetch external signals and run AI prediction |
-| POST | `http://localhost:8000/predict` | AI delay/risk prediction |
+| `/create-shipment` | `POST` | Initialize a new shipment in Firestore. |
+| `/update-location` | `POST` | Update live lat/lng (used by simulator/GPS). |
+| `/api/shipments/analyze` | `POST` | Trigger multi-modal AI analysis for a shipment. |
+| `/predict` (AI Service) | `POST` | Core risk scoring and Gemini reasoning engine. |
 
-## Evaluation Criteria Mapping
+---
+
+## 🏆 Evaluation Criteria Alignment
 
 ### Technical Merit
+- **Microservices Design**: Decoupled Python AI and Node.js Gateway.
+- **Robust Error Handling**: Comprehensive fallbacks if external APIs fail.
+- **Real-Time Sync**: Firestore listeners ensure the dashboard updates instantly.
 
-- Separate Node and Python services.
-- Firebase integration.
-- Real external API integrations.
-- AI-generated operational explanation.
-- Validated request inputs.
-- Dashboard endpoints for live data reads.
-- Basic automated tests.
+### Innovation
+- **Multi-Modal Risk**: Unlike standard GPS, it interprets *news* and *weather* context.
+- **Actionable AI**: Doesn't just report data; it suggests concrete operational strategies.
 
-### User Experience
+### Visual Excellence
+- High-fidelity Flutter UI with responsive maps.
+- Real-time traffic layer integration for visual verification.
+- Dynamic color-coding for risk levels (Low/Medium/High).
 
-- Operator dashboard for shipment creation, analysis, and monitoring.
-- Visual route tracking without requiring direct Firebase access in the browser.
-- Risk, delay, suggestion, weather, route, and disruption panels.
-- Responsive layout and labeled form controls.
+---
 
-### Alignment With Cause
-
-- Targets real logistics uncertainty caused by traffic, weather, and disruptions.
-- Helps operators respond earlier with clearer risk signals.
-- Designed for dispatchers and small fleet operators.
-
-### Innovation And Creativity
-
-- Combines simulation, live APIs, Firebase, and AI reasoning into one decision loop.
-- Uses AI for contextual explanation and action recommendation, not only text generation.
-- Can evolve into real GPS tracking, multi-shipment control, driver notifications, and historical ML.
-
-## Prototype Limits
-
-- Shipment movement is simulated, not from real GPS hardware.
-- No production authentication layer yet.
-- No historical ML training yet.
-- External API availability and credentials are required for full analysis.
-
-## Tests
-
-```bash
-cd backend/api-gateway
-npm test
-```
+## 📄 License
+Distributed under the MIT License. See `LICENSE` for more information.

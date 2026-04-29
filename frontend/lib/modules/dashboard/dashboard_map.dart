@@ -42,6 +42,7 @@ class _DashboardMapState extends State<DashboardMap> {
       zoomControlsEnabled: false,
       compassEnabled: false,
       mapToolbarEnabled: false,
+      trafficEnabled: true,
       polylines: {
         if (path.length > 1)
           Polyline(

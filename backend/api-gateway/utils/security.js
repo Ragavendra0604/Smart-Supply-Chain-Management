@@ -1,7 +1,8 @@
 const requestBuckets = new Map();
 
 const parseAllowedOrigins = () => {
-  const raw = process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:5000,http://localhost:5173';
+  const raw = process.env.ALLOWED_ORIGINS || 
+'http://localhost:3000,http://localhost:5000,http://localhost:5173,https://ssm-sb.web.app,https://ssm-sb.firebaseapp.com';
   return raw
     .split(',')
     .map((origin) => origin.trim())

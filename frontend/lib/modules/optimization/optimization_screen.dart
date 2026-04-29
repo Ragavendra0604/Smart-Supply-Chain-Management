@@ -379,9 +379,13 @@ class _AllRoutesSection extends StatelessWidget {
           final riskLevel = (r['risk_level'] ?? 'UNKNOWN').toString().toUpperCase();
 
           Color riskColor;
-          if (riskLevel == 'HIGH') riskColor = AppTheme.danger;
-          else if (riskLevel == 'MEDIUM') riskColor = AppTheme.warning;
-          else riskColor = AppTheme.success;
+          if (riskLevel == 'HIGH') {
+            riskColor = AppTheme.danger;
+          } else if (riskLevel == 'MEDIUM') {
+            riskColor = AppTheme.warning;
+          } else {
+            riskColor = AppTheme.success;
+          }
 
           return Container(
             margin: const EdgeInsets.only(bottom: 10),

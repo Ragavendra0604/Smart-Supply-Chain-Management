@@ -60,7 +60,7 @@ const startMovement = () => {
       const [lat, lng] = path[index];
 
       try {
-        await axios.post('http://localhost:5000/update-location', {
+        await axios.post(`${process.env.API_BASE_URL || 'https://api-gateway-835572562592.us-central1.run.app'}/update-location`, {
           shipment_id,
           lat,
           lng
@@ -84,7 +84,7 @@ const startMovement = () => {
 const createShipment = async () => {
   try {
     console.log("📦 Creating shipment...");
-    await axios.post('http://localhost:5000/create-shipment', {
+    await axios.post(`${process.env.API_BASE_URL || 'https://api-gateway-835572562592.us-central1.run.app'}/create-shipment`, {
       shipment_id,
       origin,
       destination
@@ -100,7 +100,7 @@ const startAI = () => {
   setInterval(async () => {
     try {
       console.log("🤖 Running AI analysis...");
-      await axios.post('http://localhost:5000/api/shipments/analyze', {
+      await axios.post(`${process.env.API_BASE_URL || 'https://api-gateway-835572562592.us-central1.run.app'}/api/shipments/analyze`, {
         shipment_id
       });
       console.log("AI analysis completed");

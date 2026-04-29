@@ -45,6 +45,8 @@ class InputData(BaseModel):
     routeData: Optional[Any] = None
     weatherData: Optional[Any] = None
     newsData: Optional[Any] = None
+    currentLocation: Optional[Any] = None
+    source: Optional[str] = None
 
     @model_validator(mode="after")
     def coerce_and_normalize(self):
@@ -121,9 +123,10 @@ def calculate_risk(route: Dict[str, Any], weather: Dict[str, Any], news: List[An
     # --- Traffic Delay ---
     if base > 0:
         delay_ratio = delay / base
-        risk += min(delay_ratio * 0.5, 0.35)  # max 0.35 from traffic
+        # Heavier weighting for traffic delays: max 0.45 from traffic
+        risk += min(delay_ratio * 0.8, 0.45) 
     elif delay > 0:
-        risk += min(delay / 1800.0, 0.35)
+        risk += min(delay / 1200.0, 0.45)
 
     # --- Weather Condition ---
     condition = (weather.get("condition") or "").lower()
@@ -228,7 +231,9 @@ def generate_ai_reasoning(
     scored_routes: List[Dict[str, Any]],
     best: Dict[str, Any],
     weather: Dict[str, Any],
-    news: List[Any]
+    news: List[Any],
+    source_city: str = "Unknown",
+    current_loc_data: Any = None
 ) -> str:
     """
     Send full context (Weather API + Maps API + News API) to Gemini
@@ -237,6 +242,11 @@ def generate_ai_reasoning(
     try:
         route_text = format_routes_for_prompt(scored_routes)
         news_text = format_news_for_prompt(news)
+        
+        # Determine live position text
+        current_loc = best.get("origin") or "In Transit"
+        if isinstance(current_loc_data, dict) and "lat" in current_loc_data:
+            current_loc = f"Coordinates {current_loc_data['lat']}, {current_loc_data['lng']}"
 
         weather_desc = (
             f"Condition: {weather.get('condition', 'Unknown')}, "
@@ -252,6 +262,11 @@ def generate_ai_reasoning(
         best_cost = best.get("costs", {}).get("total_cost", 0)
         best_fuel = best.get("costs", {}).get("fuel_liters", 0)
 
+        # Explicit traffic summary for AI context
+        traffic_status = "Significant congestion detected." if (best.get("traffic_duration_seconds", 0) - best.get("duration_seconds", 0)) > 600 else "Normal traffic flow."
+        if (best.get("traffic_duration_seconds", 0) - best.get("duration_seconds", 0)) > 1800:
+            traffic_status = "HEAVY TRAFFIC DELAYS: Major congestion on this route."
+
         prompt = f"""
 You are an expert AI logistics analyst for a Smart Supply Chain Management system.
 
@@ -266,6 +281,13 @@ and provide a clear, intelligent recommendation for the best delivery route.
 
 === NEWS API — Recent Disruptions & Events ===
 {news_text}
+
+=== JOURNEY CONTEXT ===
+Fixed Origin (Source): {source_city}
+Current Live Position: {current_loc}
+
+=== TRAFFIC SUMMARY ===
+{traffic_status}
 
 === SELECTED OPTIMIZED ROUTE ===
 Route via '{best_summary}':
@@ -375,7 +397,14 @@ def predict(data: InputData):
         current = scored_routes[0] if len(scored_routes) == 1 else scored_routes[-1]  # worst route as baseline
 
         # -------- GENERATE FULL AI REASONING --------
-        explanation = generate_ai_reasoning(scored_routes, best, weather, news)
+        explanation = generate_ai_reasoning(
+            scored_routes, 
+            best, 
+            weather, 
+            news, 
+            source_city=data.source or "Unknown",
+            current_loc_data=data.currentLocation
+        )
 
         # -------- CALCULATE SAVINGS --------
         current_time_sec = current.get("traffic_duration_seconds") or current.get("duration_seconds") or 0
