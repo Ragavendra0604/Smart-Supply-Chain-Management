@@ -1,4 +1,4 @@
-name: Deploy to Firebase Hosting on PR
+name: 🚀 Deploy to Firebase Hosting (PR Preview)
 
 on: pull_request
 
@@ -13,37 +13,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # INSTALL FLUTTER
+      # Install Flutter (LATEST STABLE)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          channel: stable
+          cache: true   # speeds up builds
 
-      # ENABLE WEB
+      # Enable web
       - name: Enable Flutter Web
         run: flutter config --enable-web
 
-      # DEPENDENCIES
+      # Verify versions (prevents silent failures)
+      - name: Check Flutter Version
+        run: flutter --version
+
+      # Install dependencies
       - name: Install dependencies
         working-directory: frontend
         run: flutter pub get
 
-      # INJECT KEY
+      # Inject API Key
       - name: Inject Google Maps API Key
         run: sed -i 's|YOUR_API_KEY_HERE|${{ secrets.GOOGLE_MAPS_API_KEY }}|g' frontend/web/index.html
 
-      # BUILD
+      # Build
       - name: Build Flutter Web
         working-directory: frontend
-        run: flutter build web
+        run: flutter build web --release
 
-      # DEPLOY PREVIEW
+      # Deploy preview
       - name: Deploy Preview
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SSM_SB }}
           projectId: ssm-sb
+          # Optional but recommended:
+          expires: 7d

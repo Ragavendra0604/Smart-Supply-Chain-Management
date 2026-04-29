@@ -1,4 +1,4 @@
-name: Deploy to Firebase Hosting on merge
+name: 🚀 Build & Deploy Flutter Web to Firebase
 
 on:
   push:
@@ -10,35 +10,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      # Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      # INSTALL FLUTTER
+      # Install Flutter (LATEST STABLE)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          channel: stable
 
-      # ENABLE WEB SUPPORT
+      # Enable web support
       - name: Enable Flutter Web
         run: flutter config --enable-web
 
-      # INSTALL DEPENDENCIES
+      # Verify versions (debug safety)
+      - name: Check Flutter & Dart version
+        run: |
+          flutter --version
+          dart --version
+
+      # Install dependencies
       - name: Install dependencies
         working-directory: frontend
         run: flutter pub get
 
-      # INJECT GOOGLE MAPS KEY
+      # Inject Google Maps API Key securely
       - name: Inject Google Maps API Key
         run: sed -i 's|YOUR_API_KEY_HERE|${{ secrets.GOOGLE_MAPS_API_KEY }}|g' frontend/web/index.html
 
-      # BUILD
+      # Build Flutter Web
       - name: Build Flutter Web
         working-directory: frontend
-        run: flutter build web
+        run: flutter build web --release
 
-      # DEPLOY
-      - name: Deploy to Firebase
+      # Deploy to Firebase Hosting
+      - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

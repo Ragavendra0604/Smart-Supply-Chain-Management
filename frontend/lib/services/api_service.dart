@@ -97,4 +97,25 @@ class ApiService {
       throw Exception('AI analysis failed');
     }
   }
+
+  Future<void> startBackendSimulator() async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/simulator/start');
+    final response = await _client.post(
+      uri,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'shipment_id': 'SHP001',
+        'origin': 'Chennai',
+        'destination': 'Bangalore'
+      }),
+    );
+    if (response.statusCode >= 400) {
+      throw Exception('Simulator failed to start');
+    }
+  }
+
+  Future<void> stopBackendSimulator() async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/simulator/stop');
+    await _client.post(uri);
+  }
 }
