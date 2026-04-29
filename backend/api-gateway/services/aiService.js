@@ -2,8 +2,12 @@ import axios from 'axios';
 
 const getPrediction = async (data) => {
   try {
+    const url = process.env.AI_SERVICE_URL.endsWith('/predict') 
+      ? process.env.AI_SERVICE_URL 
+      : `${process.env.AI_SERVICE_URL}/predict`;
+
     const response = await axios.post(
-      process.env.AI_SERVICE_URL,
+      url,
       data,
       {
         headers: { 'Content-Type': 'application/json' },
