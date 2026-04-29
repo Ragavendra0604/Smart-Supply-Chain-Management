@@ -1,4 +1,4 @@
-﻿import dotenv from 'dotenv';
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -211,7 +211,7 @@ app.post('/api/simulator/start', simulatorController.startSimulator);
 app.post('/api/simulator/stop', simulatorController.stopSimulator);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => console.log(\Server running on port \\));
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 
 /* Mounted LAST: POST /api/shipments/analyze - keeps inline GET routes unblocked */
 app.use('/api/shipments', shipmentRoutes);
