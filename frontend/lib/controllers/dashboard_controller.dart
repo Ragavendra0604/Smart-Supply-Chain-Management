@@ -56,7 +56,8 @@ class DashboardController extends ChangeNotifier {
       if (activeShipmentId != null) {
         _bindShipment(activeShipmentId!);
       } else {
-        errorMessage = 'No shipments found. Create or analyze a shipment first.';
+        errorMessage =
+            'No shipments found. Create or analyze a shipment first.';
       }
     } catch (error) {
       errorMessage = 'Unable to load dashboard data.';
@@ -82,7 +83,7 @@ class DashboardController extends ChangeNotifier {
 
     final preferredId = AppConfig.initialShipmentId;
     final candidateIds = [
-      ?activeShipmentId,
+      if (activeShipmentId != null) activeShipmentId!,
       if (preferredId.isNotEmpty) preferredId,
       shipments.first.shipmentId,
     ];
@@ -131,6 +132,28 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  Future<void> startLiveSimulation() async {
+    isSimulating = true;
+    notifyListeners();
+    try {
+      await _apiService.startBackendSimulator();
+      errorMessage = null;
+    } catch (e) {
+      isSimulating = false;
+      errorMessage = 'Failed to start live simulation';
+      rethrow;
+    }
+    notifyListeners();
+  }
+
+  Future<void> stopLiveSimulation() async {
+    isSimulating = false;
+    notifyListeners();
+    try {
+      await _apiService.stopBackendSimulator();
+    } catch (_) {}
+  }
+
   void toggleSimulation() {
     if (!AppConfig.enableSimulationControls) return;
 
@@ -162,7 +185,8 @@ class DashboardController extends ChangeNotifier {
   bool consumeHighRiskAlert(Shipment shipment) {
     if (shipment.riskLevel != RiskLevel.high) return false;
 
-    final token = '${shipment.shipmentId}:${shipment.ai.riskLevel}:${shipment.ai.delayPrediction}';
+    final token =
+        '${shipment.shipmentId}:${shipment.ai.riskLevel}:${shipment.ai.delayPrediction}';
     if (_lastHighRiskToken == token) return false;
 
     _lastHighRiskToken = token;
@@ -189,7 +213,8 @@ class DashboardController extends ChangeNotifier {
       },
       onError: (_) {
         usingFirestore = false;
-        errorMessage = 'Live stream unavailable. Falling back to backend polling.';
+        errorMessage =
+            'Live stream unavailable. Falling back to backend polling.';
         activeShipmentStream =
             _apiService.watchShipment(shipmentId).asBroadcastStream();
         _activeShipmentSubscription = activeShipmentStream!.listen(

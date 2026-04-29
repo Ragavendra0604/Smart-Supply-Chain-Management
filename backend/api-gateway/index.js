@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+ï»¿import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 
 import { db } from './config/firebase.js';
 import shipmentRoutes from './routes/shipmentRoutes.js';
+import simulatorController from './controllers/simulatorController.js';
 import { corsOptions, rateLimiter, securityHeaders } from './utils/security.js';
 import { serializeFirestoreData } from './utils/firestoreSerializer.js';
 import {
@@ -205,8 +206,12 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+/* ---------------- SIMULATOR CONTROLS ---------------- */
+app.post('/api/simulator/start', simulatorController.startSimulator);
+app.post('/api/simulator/stop', simulatorController.stopSimulator);
 
-/* Mounted LAST: POST /api/shipments/analyze — keeps inline GET routes unblocked */
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => console.log(\Server running on port \\));
+
+/* Mounted LAST: POST /api/shipments/analyze - keeps inline GET routes unblocked */
 app.use('/api/shipments', shipmentRoutes);

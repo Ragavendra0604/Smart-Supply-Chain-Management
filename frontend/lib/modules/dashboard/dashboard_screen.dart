@@ -16,6 +16,33 @@ class DashboardScreen extends StatelessWidget {
         title: const Text('Supply Chain Overview'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.play_circle_fill, color: Colors.green),
+            tooltip: 'Start Live Simulation',
+            onPressed: () async {
+              try {
+                await context.read<DashboardController>().startLiveSimulation();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Simulation started!')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to start: $e')),
+                  );
+                }
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.stop_circle, color: Colors.red),
+            tooltip: 'Stop Live Simulation',
+            onPressed: () async {
+              await context.read<DashboardController>().stopLiveSimulation();
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_none),
             onPressed: () {},
           ),

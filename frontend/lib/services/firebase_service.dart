@@ -10,7 +10,7 @@ class FirebaseService {
   final FirebaseFirestore? _firestoreInternal;
 
   FirebaseFirestore get _firestore {
-    if (_firestoreInternal != null) return _firestoreInternal;
+    if (_firestoreInternal != null) return _firestoreInternal ?? FirebaseFirestore.instance;;
     
     if (!DashboardFirebaseOptions.enabled) {
       // Return a dummy/mock or throw a better error if accessed.
