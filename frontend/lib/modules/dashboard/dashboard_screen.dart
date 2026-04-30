@@ -16,33 +16,6 @@ class DashboardScreen extends StatelessWidget {
         title: const Text('Supply Chain Overview'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.play_circle_fill, color: Colors.green),
-            tooltip: 'Start Live Simulation',
-            onPressed: () async {
-              try {
-                await context.read<DashboardController>().startLiveSimulation();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Simulation started!')),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to start: $e')),
-                  );
-                }
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.stop_circle, color: Colors.red),
-            tooltip: 'Stop Live Simulation',
-            onPressed: () async {
-              await context.read<DashboardController>().stopLiveSimulation();
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.notifications_none),
             onPressed: () {},
           ),
@@ -244,23 +217,42 @@ class _ShipmentCard extends StatelessWidget {
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  MetricChip(
-                    label: 'Delay',
-                    value: shipment.ai.delayPrediction,
-                    icon: Icons.timer,
+                  Row(
+                    children: [
+                      MetricChip(
+                        label: 'Delay',
+                        value: shipment.ai.delayPrediction,
+                        icon: Icons.timer,
+                      ),
+                      const Spacer(),
+                      Consumer<DashboardController>(
+                        builder: (context, controller, _) {
+                          final isSimulatingThis = controller.isSimulating && 
+                                                 controller.simulatingShipmentId == shipment.shipmentId;
+                          
+                          return ElevatedButton.icon(
+                            onPressed: () => controller.toggleSimulation(shipment),
+                            icon: Icon(
+                              isSimulatingThis ? Icons.stop_circle : Icons.play_arrow_rounded,
+                              size: 18,
+                            ),
+                            label: Text(isSimulatingThis ? 'Stop' : 'Simulate'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isSimulatingThis 
+                                  ? AppTheme.danger.withValues(alpha: 0.1)
+                                  : AppTheme.primary.withValues(alpha: 0.1),
+                              foregroundColor: isSimulatingThis ? AppTheme.danger : AppTheme.primary,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                  Text(
-                    shipment.status,
-                    style: const TextStyle(
-                      color: AppTheme.primary,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),

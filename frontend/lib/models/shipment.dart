@@ -32,6 +32,36 @@ class Shipment {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  Shipment copyWith({
+    String? id,
+    String? shipmentId,
+    String? origin,
+    String? destination,
+    String? status,
+    LatLng? currentLocation,
+    ShipmentRoute? route,
+    ShipmentWeather? weather,
+    List<ShipmentNewsItem>? news,
+    ShipmentAiInsight? ai,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Shipment(
+      id: id ?? this.id,
+      shipmentId: shipmentId ?? this.shipmentId,
+      origin: origin ?? this.origin,
+      destination: destination ?? this.destination,
+      status: status ?? this.status,
+      currentLocation: currentLocation ?? this.currentLocation,
+      route: route ?? this.route,
+      weather: weather ?? this.weather,
+      news: news ?? this.news,
+      ai: ai ?? this.ai,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
   bool get hasRoute => route.path.length > 1;
   bool get hasAnalysis => ai.success || ai.explanation.isNotEmpty;
   bool get hasLiveLocation => currentLocation != null;

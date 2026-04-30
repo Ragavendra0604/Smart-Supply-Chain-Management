@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class MapUtils {
@@ -27,4 +28,23 @@ class MapUtils {
       northeast: LatLng(maxLat, maxLng),
     );
   }
+
+  static double calculateBearing(LatLng start, LatLng end) {
+    final double startLat = _degreesToRadians(start.latitude);
+    final double startLong = _degreesToRadians(start.longitude);
+    final double endLat = _degreesToRadians(end.latitude);
+    final double endLong = _degreesToRadians(end.longitude);
+
+    final double dLong = endLong - startLong;
+
+    final double y = math.sin(dLong) * math.cos(endLat);
+    final double x = math.cos(startLat) * math.sin(endLat) -
+        math.sin(startLat) * math.cos(endLat) * math.cos(dLong);
+
+    final double bearing = math.atan2(y, x);
+    return (_radiansToDegrees(bearing) + 360) % 360;
+  }
+
+  static double _degreesToRadians(double degrees) => degrees * math.pi / 180;
+  static double _radiansToDegrees(double radians) => radians * 180 / math.pi;
 }

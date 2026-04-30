@@ -35,6 +35,7 @@ class DashboardController extends ChangeNotifier {
   bool isBootstrapping = true;
   bool isRefreshingAi = false;
   bool isSimulating = false;
+  String? simulatingShipmentId;
   bool usingFirestore = false;
   String? errorMessage;
   DateTime? lastUpdated;
@@ -154,31 +155,38 @@ class DashboardController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  void toggleSimulation() {
+  void toggleSimulation(Shipment targetShipment) {
     if (!AppConfig.enableSimulationControls) return;
 
-    if (isSimulating) {
+    if (isSimulating && simulatingShipmentId == targetShipment.shipmentId) {
       _simulationTimer?.cancel();
       isSimulating = false;
+      simulatingShipmentId = null;
       notifyListeners();
       return;
     }
 
-    final shipment = latestShipment;
-    if (shipment == null || !shipment.hasRoute || activeShipmentId == null) {
+    // Stop any existing simulation first
+    _simulationTimer?.cancel();
+
+    if (!targetShipment.hasRoute) {
       errorMessage = 'Simulation requires a shipment with route data.';
       notifyListeners();
       return;
     }
 
-    _simulationIndex = shipment.currentRouteIndex;
+    // Auto-select this shipment so we can see it on the map
+    selectShipment(targetShipment.shipmentId);
+
+    _simulationIndex = targetShipment.currentRouteIndex;
     isSimulating = true;
+    simulatingShipmentId = targetShipment.shipmentId;
     errorMessage = null;
     notifyListeners();
 
     _simulationTimer = Timer.periodic(
       AppConfig.simulationStepInterval,
-      (_) => _advanceSimulation(),
+      (_) => _advanceSimulation(targetShipment.shipmentId),
     );
   }
 
@@ -235,11 +243,14 @@ class DashboardController extends ChangeNotifier {
     );
   }
 
-  Future<void> _advanceSimulation() async {
-    final shipment = latestShipment;
-    final shipmentId = activeShipmentId;
+  Future<void> _advanceSimulation(String targetId) async {
+    // Find the shipment in the current list to get latest path
+    final shipment = recentShipments.firstWhere(
+      (s) => s.shipmentId == targetId,
+      orElse: () => latestShipment!,
+    );
 
-    if (shipment == null || shipmentId == null || shipment.route.path.isEmpty) {
+    if (shipment.route.path.isEmpty) {
       _stopSimulation();
       return;
     }
@@ -249,16 +260,29 @@ class DashboardController extends ChangeNotifier {
       return;
     }
 
+    final newPoint = shipment.route.path[_simulationIndex];
+
+    // OPTIMISTIC UPDATE: Update local state immediately for smooth animation
+    final updatedShipment = shipment.copyWith(
+      currentLocation: newPoint,
+      status: 'IN_TRANSIT',
+    );
+    
+    _syncShipmentSummary(updatedShipment);
+    if (activeShipmentId == targetId) {
+      latestShipment = updatedShipment;
+    }
+    notifyListeners();
+
     try {
       await _locationService.sendVehicleLocation(
-        shipmentId: shipmentId,
-        point: shipment.route.path[_simulationIndex],
+        shipmentId: targetId,
+        point: newPoint,
       );
-      final step = (shipment.route.path.length / 70).ceil();
+      final step = (shipment.route.path.length / 100).ceil();
       _simulationIndex += step <= 0 ? 1 : step;
     } catch (_) {
       errorMessage = 'Simulation update failed.';
-      _stopSimulation();
     }
   }
 
