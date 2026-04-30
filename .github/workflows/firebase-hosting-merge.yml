@@ -37,7 +37,7 @@ jobs:
 
       # Inject Google Maps API Key securely
       - name: Inject Google Maps API Key
-        run: sed -i 's|YOUR_API_KEY_HERE|${{ secrets.GOOGLE_MAPS_API_KEY }}|g' frontend/web/index.html
+        run: sed -i 's|{{GOOGLE_MAPS_API_KEY}}|${{ secrets.GOOGLE_MAPS_API_KEY }}|g' frontend/web/index.html
 
       # Build Flutter Web
       - name: Build Flutter Web
