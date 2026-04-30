@@ -178,7 +178,18 @@ class DashboardController extends ChangeNotifier {
     // Auto-select this shipment so we can see it on the map
     selectShipment(targetShipment.shipmentId);
 
-    _simulationIndex = targetShipment.currentRouteIndex;
+    // If already at or near destination, restart from beginning for the demo
+    int startIndex = targetShipment.currentRouteIndex;
+    if (startIndex >= targetShipment.route.path.length - 2) {
+      debugPrint(
+          'Restarting simulation from beginning for ${targetShipment.shipmentId}');
+      startIndex = 0;
+    }
+
+    debugPrint(
+        'Starting simulation for ${targetShipment.shipmentId} at index $startIndex');
+
+    _simulationIndex = startIndex;
     isSimulating = true;
     simulatingShipmentId = targetShipment.shipmentId;
     errorMessage = null;
@@ -267,7 +278,7 @@ class DashboardController extends ChangeNotifier {
       currentLocation: newPoint,
       status: 'IN_TRANSIT',
     );
-    
+
     _syncShipmentSummary(updatedShipment);
     if (activeShipmentId == targetId) {
       latestShipment = updatedShipment;

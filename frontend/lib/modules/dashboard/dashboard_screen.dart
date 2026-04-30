@@ -37,6 +37,32 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 _SummaryStats(shipments: controller.recentShipments),
+                if (controller.errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            controller.errorMessage!,
+                            style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16, color: AppTheme.danger),
+                          onPressed: () => controller.errorMessage = null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -231,7 +257,20 @@ class _ShipmentCard extends StatelessWidget {
                                                  controller.simulatingShipmentId == shipment.shipmentId;
                           
                           return ElevatedButton.icon(
-                            onPressed: () => controller.toggleSimulation(shipment),
+                            onPressed: () {
+                              controller.toggleSimulation(shipment);
+                              final isStarting = !isSimulatingThis;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(isStarting 
+                                    ? '🚀 Simulation started for ${shipment.shipmentId}' 
+                                    : '🛑 Simulation stopped'),
+                                  duration: const Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                  backgroundColor: isStarting ? AppTheme.primary : AppTheme.danger,
+                                ),
+                              );
+                            },
                             icon: Icon(
                               isSimulatingThis ? Icons.stop_circle : Icons.play_arrow_rounded,
                               size: 18,
