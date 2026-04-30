@@ -8,35 +8,55 @@ dotenv.config();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-if (!admin.apps.length) {
+let firebaseInitialized = false;
+let firebaseApp = null;
+
+const createFirebaseCredential = () => {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    console.log('✅ Firebase credential loaded from FIREBASE_SERVICE_ACCOUNT');
+    return admin.credential.cert(serviceAccount);
+  }
+
+  const keyPath = path.resolve(__dirname, '../serviceAccountKey.json');
+  if (fs.existsSync(keyPath)) {
+    const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
+    console.log('✅ Firebase credential loaded from local serviceAccountKey.json');
+    return admin.credential.cert(serviceAccount);
+  }
+
+  console.log('✅ No local service account found, using Application Default Credentials');
+  return admin.credential.applicationDefault();
+};
+
+export const initializeFirebase = () => {
+  if (firebaseInitialized) {
+    return firebaseApp;
+  }
+
   try {
-    let credential;
-
-    // First, try to use the service account from environment (Secret Manager)
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-      const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-      credential = admin.credential.cert(serviceAccount);
-      console.log('✅ Firebase initialized with Service Account from Secret Manager');
-    } else {
-      // Fallback: Local development with serviceAccountKey.json
-      const keyPath = path.resolve(__dirname, '../serviceAccountKey.json');
-      if (fs.existsSync(keyPath)) {
-        const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
-        credential = admin.credential.cert(serviceAccount);
-        console.log('✅ Firebase initialized with Service Account Key');
-      } else {
-        // Last resort: Application Default Credentials
-        credential = admin.credential.applicationDefault();
-        console.log('✅ Firebase initialized with Application Default Credentials');
-      }
-    }
-
-    admin.initializeApp({ credential });
+    const credential = createFirebaseCredential();
+    firebaseApp = admin.initializeApp({ credential });
+    firebaseInitialized = true;
+    console.log('✅ Firebase initialized successfully');
   } catch (error) {
     console.error('❌ Firebase init error:', error.message);
-    // Don't exit process, let it try to continue or fail gracefully later
+    throw error;
   }
-}
 
-export const db = admin.firestore();
-export const auth = admin.auth();
+  return firebaseApp;
+};
+
+export const db = () => {
+  if (!firebaseInitialized) {
+    initializeFirebase();
+  }
+  return admin.firestore();
+};
+
+export const auth = () => {
+  if (!firebaseInitialized) {
+    initializeFirebase();
+  }
+  return admin.auth();
+};

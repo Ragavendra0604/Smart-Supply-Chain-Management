@@ -4,7 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-import { db } from './config/firebase.js';
+import { db, initializeFirebase } from './config/firebase.js';
 import shipmentRoutes from './routes/shipmentRoutes.js';
 import simulatorController from './controllers/simulatorController.js';
 import { corsOptions, rateLimiter, securityHeaders } from './utils/security.js';
@@ -45,7 +45,7 @@ app.get('/health', (req, res) => {
 /* ---------------- LIST SHIPMENTS (PROTECTED) ---------------- */
 app.get('/api/shipments', authMiddleware, async (req, res) => {
   try {
-    const snapshot = await db
+    const snapshot = await db()
       .collection('shipments')
       .orderBy('created_at', 'desc')
       .limit(20)
@@ -65,7 +65,7 @@ app.get('/api/shipments', authMiddleware, async (req, res) => {
 /* ---------------- GET LOGISTICS STATS (PROTECTED) ---------------- */
 app.get('/api/stats', authMiddleware, async (req, res) => {
   try {
-    const snapshot = await db.collection('shipments').get();
+    const snapshot = await db().collection('shipments').get();
 
     let total = snapshot.size;
     let highRiskCount = 0;
@@ -120,7 +120,7 @@ app.get('/api/shipments/:shipment_id', authMiddleware, async (req, res) => {
     }
 
     const { shipment_id } = validation.value;
-    const doc = await db.collection('shipments').doc(shipment_id).get();
+    const doc = await db().collection('shipments').doc(shipment_id).get();
 
     if (!doc.exists) {
       return res.status(404).json({ success: false, error: 'Shipment not found' });
@@ -149,7 +149,7 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
 
     const { shipment_id, origin, destination } = validation.value;
 
-    await db.collection('shipments').doc(shipment_id).set({
+    await db().collection('shipments').doc(shipment_id).set({
       shipment_id,
       origin,
       destination,
@@ -177,7 +177,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
     }
 
     const { shipment_id, lat, lng } = validation.value;
-    const shipmentRef = db.collection('shipments').doc(shipment_id);
+    const shipmentRef = db().collection('shipments').doc(shipment_id);
     const doc = await shipmentRef.get();
 
     if (!doc.exists) {
@@ -203,7 +203,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
 /* ---------------- TEST FIRESTORE ---------------- */
 app.get('/test-db', async (req, res) => {
   try {
-    await db.collection('test').doc('demo').set({ working: true });
+    await db().collection('test').doc('demo').set({ working: true });
     res.send('Firestore working');
   } catch (err) {
     res.status(500).send(err.message);
@@ -221,6 +221,7 @@ const bootstrap = async () => {
   try {
     // In production, these names match GCP Secret Manager keys
     await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'MAPS_API_KEY', 'OPENWEATHER_API_KEY']);
+    initializeFirebase();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Production Gateway running on port ${PORT}`);

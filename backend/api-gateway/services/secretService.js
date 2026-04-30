@@ -2,14 +2,30 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 const client = new SecretManagerServiceClient();
 
+const resolveProjectId = async () => {
+  return (
+    process.env.GOOGLE_CLOUD_PROJECT ||
+    process.env.GCP_PROJECT ||
+    process.env.GCLOUD_PROJECT ||
+    process.env.PROJECT_ID ||
+    (await client.getProjectId()) ||
+    undefined
+  );
+};
+
 /**
  * Production-grade Secret Management
  * Fetches secrets from GCP Secret Manager at runtime to avoid hardcoded keys.
  */
 export const getSecret = async (secretName) => {
   try {
+    const projectId = await resolveProjectId();
+    if (!projectId) {
+      throw new Error('Unable to determine GCP project ID for Secret Manager access');
+    }
+
     const [version] = await client.accessSecretVersion({
-      name: `projects/${process.env.GOOGLE_CLOUD_PROJECT}/secrets/${secretName}/versions/latest`,
+      name: `projects/${projectId}/secrets/${secretName}/versions/latest`,
     });
 
     const payload = version.payload.data.toString();

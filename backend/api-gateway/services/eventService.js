@@ -52,7 +52,7 @@ class EventManager extends EventEmitter {
       timestamp: new Date().toISOString()
     };
     
-    await db.collection('analytics_stream').add(entry);
+    await db().collection('analytics_stream').add(entry);
   }
 
   emitLocationUpdate(shipment_id, location) {

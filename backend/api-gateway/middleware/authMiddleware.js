@@ -24,7 +24,7 @@ export const authMiddleware = async (req, res, next) => {
     }
 
     const idToken = authHeader.split('Bearer ')[1];
-    const decodedToken = await auth.verifyIdToken(idToken);
+    const decodedToken = await auth().verifyIdToken(idToken);
     
     // Attach user context for downstream logic (RBAC, auditing)
     req.user = decodedToken;

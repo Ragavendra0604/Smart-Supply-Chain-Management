@@ -11,7 +11,7 @@ import { publishEvent } from '../services/pubsubService.js';
  * PRODUCTION LOGISTICS ENGINE: Multi-Modal & Distributed
  */
 const performAnalysis = async (shipment_id) => {
-    const doc = await db.collection('shipments').doc(shipment_id).get();
+    const doc = await db().collection('shipments').doc(shipment_id).get();
     if (!doc.exists) throw new Error('Shipment not found');
 
     const shipment = doc.data();
@@ -50,7 +50,7 @@ const performAnalysis = async (shipment_id) => {
     const aiResponse = await aiService.getPrediction(payload);
 
     // 4. ATOMIC PERSISTENCE
-    await db.collection('shipments').doc(shipment_id).update({
+    await db().collection('shipments').doc(shipment_id).update({
       aiResponse,
       last_analyzed_at: new Date(),
       status: 'ANALYZED'

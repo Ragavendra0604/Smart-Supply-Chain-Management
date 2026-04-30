@@ -5,10 +5,10 @@ import { db } from '../config/firebase.js';
  * Ensures each event is processed exactly once by checking a processed_events collection.
  */
 export const processIdempotentEvent = async (eventId, processingLogic) => {
-  const eventRef = db.collection('processed_events').doc(eventId);
+  const eventRef = db().collection('processed_events').doc(eventId);
 
   try {
-    return await db.runTransaction(async (transaction) => {
+    return await db().runTransaction(async (transaction) => {
       const doc = await transaction.get(eventRef);
 
       if (doc.exists) {
