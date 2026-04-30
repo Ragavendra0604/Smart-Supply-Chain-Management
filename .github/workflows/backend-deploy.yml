@@ -1,0 +1,62 @@
+name: 🚀 Deploy Backend Services to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    # Required for Workload Identity Federation or Service Account Key
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_SSM_SB }}'
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v2'
+
+      # --- 1. Deploy API Gateway ---
+      - name: 'Deploy API Gateway'
+        id: deploy-gateway
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: 'api-gateway'
+          region: 'us-central1'
+          source: './backend/api-gateway'
+          env_vars: |
+            AI_SERVICE_URL=https://ai-service-1026695506439.us-central1.run.app
+            GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+            WEATHER_API_KEY=${{ secrets.WEATHER_API_KEY }}
+            NEWS_API_KEY=${{ secrets.NEWS_API_KEY }}
+            PORT=8080
+
+      # --- 2. Deploy AI Service ---
+      - name: 'Deploy AI Service'
+        id: deploy-ai
+        uses: 'google-github-actions/deploy-cloudrun@v2'
+        with:
+          service: 'ai-service'
+          region: 'us-central1'
+          source: './backend/ai-service'
+          env_vars: |
+            GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+
+      - name: 'Show Output URLs'
+        run: |
+          echo "API Gateway URL: ${{ steps.deploy-gateway.outputs.url }}"
+          echo "AI Service URL: ${{ steps.deploy-ai.outputs.url }}"

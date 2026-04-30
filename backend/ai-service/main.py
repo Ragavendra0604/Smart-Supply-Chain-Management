@@ -37,11 +37,11 @@ except Exception:
     # Fallback for local dev
     client = None
 
-# -------- PRODUCTION ML MODEL (v3 XGBoost) --------
-MODEL_PATH = "delay_model_v3.pkl"
+# -------- PRODUCTION ML MODEL --------
+MODEL_PATH = "delay_model.pkl"
 try:
     ml_model = joblib.load(MODEL_PATH)
-    print(f"🔥 Production XGBoost Model v3 loaded from {MODEL_PATH}")
+    print(f"🔥 Production XGBoost Model loaded from {MODEL_PATH}")
 except Exception as e:
     print(f"⚠️ Warning: Could not load production model: {e}")
     ml_model = None
@@ -232,6 +232,13 @@ def predict(data: InputData):
                 "predicted_delay_mins": predicted_delay,
             })
 
+        if not scored_routes:
+            return {
+                "success": False,
+                "error": "No valid route data provided for analysis.",
+                "suggestion": "Proceed with caution - route data unavailable"
+            }
+
         # Sort by lowest delay
         scored_routes.sort(key=lambda x: x["predicted_delay_mins"])
         best = scored_routes[0]
@@ -250,7 +257,11 @@ def predict(data: InputData):
         }
     except Exception as e:
         print(f"Prediction Error: {str(e)}") # Log for internal debugging
-        return {"success": False, "error": "An internal error occurred during prediction analysis."}
+        return {
+            "success": False, 
+            "error": str(e),
+            "suggestion": "Proceed normally (AI Fallback Mode)"
+        }
 
 @app.get("/health")
 def health():
