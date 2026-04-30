@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, model_validator
 from google import genai
 from typing import List, Dict, Any, Optional
@@ -12,6 +13,15 @@ import numpy as np
 from datetime import datetime
 
 app = FastAPI()
+
+# Enable CORS for frontend/backend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -------- AUTHENTICATION --------
 try:
@@ -111,7 +121,7 @@ def generate_logistics_insight(prediction: float, data: InputData) -> str:
         weather = data.weatherData or {}
         news = data.newsData or []
         
-        prompt = fprompt = f"""
+        prompt = f"""
             You are a Senior Logistics Strategy Consultant at Google, specializing in real-time supply chain optimization and disruption management.
 
             ---

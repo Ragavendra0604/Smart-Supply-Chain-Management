@@ -155,7 +155,7 @@ class DashboardController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  void toggleSimulation(Shipment targetShipment) {
+  void toggleSimulation(Shipment targetShipment) async {
     if (!AppConfig.enableSimulationControls) return;
 
     if (isSimulating && simulatingShipmentId == targetShipment.shipmentId) {
@@ -169,10 +169,35 @@ class DashboardController extends ChangeNotifier {
     // Stop any existing simulation first
     _simulationTimer?.cancel();
 
+    // If shipment has no route, trigger analysis first then try to start simulation
     if (!targetShipment.hasRoute) {
-      errorMessage = 'Simulation requires a shipment with route data.';
+      errorMessage = 'No route data. Fetching optimized route via AI...';
       notifyListeners();
-      return;
+
+      try {
+        await _apiService.analyzeShipment(targetShipment.shipmentId);
+        // Wait a moment for the Firestore/Stream to sync the new route
+        await Future.delayed(const Duration(seconds: 2));
+
+        // Refresh the shipment object from our recent list (it should have updated via the stream)
+        final refreshed = recentShipments.firstWhere(
+          (s) => s.shipmentId == targetShipment.shipmentId,
+          orElse: () => targetShipment,
+        );
+
+        if (!refreshed.hasRoute) {
+          errorMessage = 'AI failed to provide a route. Please try again.';
+          notifyListeners();
+          return;
+        }
+
+        // Success! Proceed with the refreshed shipment
+        targetShipment = refreshed;
+      } catch (e) {
+        errorMessage = 'Failed to fetch route: $e';
+        notifyListeners();
+        return;
+      }
     }
 
     // Auto-select this shipment so we can see it on the map

@@ -17,6 +17,7 @@ import {
 import { authMiddleware } from './middleware/authMiddleware.js';
 import { eventManager } from './services/eventService.js';
 import { loadSecrets } from './services/secretService.js';
+import mapsService from './services/mapsService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -166,6 +167,15 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
 
     const { shipment_id, origin, destination } = validation.value;
 
+    // Fetch route data immediately
+    let routeData = [];
+    try {
+      routeData = await mapsService.getRoute(origin, destination);
+    } catch (err) {
+      console.error(`⚠️ Failed to fetch initial route: ${err.message}`);
+      // Continue with empty routeData
+    }
+
     await db().collection('shipments').doc(shipment_id).set({
       shipment_id,
       origin,
@@ -174,6 +184,7 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
       current_location: null,
       risk: null,
       status: 'CREATED',
+      routeData: routeData, // Store route data immediately
       created_at: new Date()
     });
 
