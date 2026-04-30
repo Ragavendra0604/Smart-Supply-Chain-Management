@@ -2,9 +2,12 @@ import axios from 'axios';
 
 const getPrediction = async (data) => {
   try {
-    const url = process.env.AI_SERVICE_URL.endsWith('/predict') 
-      ? process.env.AI_SERVICE_URL 
-      : `${process.env.AI_SERVICE_URL}/predict`;
+    const aiBaseUrl = process.env.AI_SERVICE_URL || '';
+    if (!aiBaseUrl) throw new Error('AI_SERVICE_URL is not configured');
+
+    const url = aiBaseUrl.endsWith('/predict') 
+      ? aiBaseUrl 
+      : `${aiBaseUrl}/predict`;
 
     const response = await axios.post(
       url,

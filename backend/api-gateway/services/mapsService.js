@@ -4,7 +4,7 @@ import polyline from '@mapbox/polyline';
 const getRoute = async (origin, destination) => {
   try {
     const url = `https://maps.googleapis.com/maps/api/directions/json`;
-    
+
     if (!process.env.GOOGLE_MAPS_API_KEY) {
       console.error('GOOGLE_MAPS_API_KEY not configured');
       return getDefaultRoute(origin, destination);
@@ -57,14 +57,14 @@ const getRoute = async (origin, destination) => {
 
 // Fallback route generator
 // const getDefaultRoute = (origin, destination) => {
-//   // Calculate approximate distance based on location names (fallback)
+//   Calculate approximate distance based on location names (fallback)
 //   const distances = {
 //     'Chennai-Bangalore': { distance_meters: 350000, duration_seconds: 18000 },
 //     'Mumbai-Delhi': { distance_meters: 1450000, duration_seconds: 68400 },
 //     'Bangalore-Hyderabad': { distance_meters: 565000, duration_seconds: 29400 },
 //     'Chennai-Hyderabad': { distance_meters: 620000, duration_seconds: 32400 },
 //   };
-  
+
 //   const key = `${origin}-${destination}`;
 //   const distanceData = distances[key] || {
 //     distance_meters: 500000 + Math.random() * 500000,
