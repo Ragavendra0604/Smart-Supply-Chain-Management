@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { GoogleAuth } from 'google-auth-library';
+
+const auth = new GoogleAuth();
 
 const getPrediction = async (data) => {
   try {
@@ -9,11 +12,24 @@ const getPrediction = async (data) => {
       ? aiBaseUrl 
       : `${aiBaseUrl}/predict`;
 
+    // Production-Grade: Fetch ID Token for Service-to-Service Auth
+    // This allows calling Cloud Run services that have --no-allow-unauthenticated
+    let authHeaders = {};
+    try {
+      const client = await auth.getIdTokenClient(aiBaseUrl);
+      authHeaders = await client.getRequestHeaders();
+    } catch (authError) {
+      console.warn('Unable to fetch ID Token (likely local dev):', authError.message);
+    }
+
     const response = await axios.post(
       url,
       data,
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          ...authHeaders,
+          'Content-Type': 'application/json' 
+        },
         timeout: 20000
       }
     );

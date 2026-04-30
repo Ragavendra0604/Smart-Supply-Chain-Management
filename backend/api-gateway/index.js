@@ -196,38 +196,6 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
   }
 });
 
-/* ---------------- UPDATE LOCATION (PROTECTED) ---------------- */
-app.post('/update-location', authMiddleware, async (req, res) => {
-  try {
-    const validation = validateLocationUpdate(req.body);
-
-    if (!validation.valid) {
-      return res.status(400).json({ success: false, errors: validation.errors });
-    }
-
-    const { shipment_id, lat, lng } = validation.value;
-    const shipmentRef = db().collection('shipments').doc(shipment_id);
-    const doc = await shipmentRef.get();
-
-    if (!doc.exists) {
-      return res.status(404).json({ success: false, error: 'Shipment not found' });
-    }
-
-    await shipmentRef.update({
-      current_location: { lat, lng },
-      status: 'IN_TRANSIT',
-      updated_at: new Date()
-    });
-
-    // Fire-and-forget: Trigger AI analysis asynchronously via Event Pipeline
-    eventManager.emitLocationUpdate(shipment_id, { lat, lng });
-
-    res.json({ success: true });
-
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 app.post('/update-location', authMiddleware, async (req, res) => {
   try {
