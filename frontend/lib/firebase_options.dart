@@ -92,7 +92,7 @@ class DashboardFirebaseOptions {
   // flutter run --dart-define=ENABLE_FIREBASE=true
   static const bool enabled = bool.fromEnvironment(
     'ENABLE_FIREBASE',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   static FirebaseOptions get currentPlatform =>

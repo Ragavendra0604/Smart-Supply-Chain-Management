@@ -17,6 +17,14 @@ import 'modules/auth/login_screen.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Global error handler for better debugging in Web
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    debugPrint('FLUTTER ERROR: ${details.exception}');
+  };
+
+  try {
+
   if (DashboardFirebaseOptions.enabled) {
     await Firebase.initializeApp(
       options: DashboardFirebaseOptions.currentPlatform,
@@ -47,6 +55,10 @@ Future<void> main() async {
       child: const LogisticsDashboardApp(),
     ),
   );
+  } catch (e, stack) {
+    debugPrint('FATAL INITIALIZATION ERROR: $e');
+    debugPrint(stack.toString());
+  }
 }
 
 class LogisticsDashboardApp extends StatelessWidget {

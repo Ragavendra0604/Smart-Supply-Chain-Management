@@ -1,4 +1,4 @@
-import dotenv from 'dotenv';
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -16,8 +16,7 @@ import {
 } from './utils/validation.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
 import { eventManager } from './services/eventService.js';
-
-dotenv.config();
+import { loadSecrets } from './services/secretService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -67,7 +66,7 @@ app.get('/api/shipments', authMiddleware, async (req, res) => {
 app.get('/api/stats', authMiddleware, async (req, res) => {
   try {
     const snapshot = await db.collection('shipments').get();
-    
+
     let total = snapshot.size;
     let highRiskCount = 0;
     let mediumRiskCount = 0;
@@ -78,7 +77,7 @@ app.get('/api/stats', authMiddleware, async (req, res) => {
     snapshot.docs.forEach(doc => {
       const data = doc.data();
       const ai = data.aiResponse || {};
-      
+
       if (ai.risk_level === 'HIGH') highRiskCount++;
       else if (ai.risk_level === 'MEDIUM') mediumRiskCount++;
       else if (ai.risk_level === 'LOW') lowRiskCount++;
@@ -216,7 +215,23 @@ app.post('/api/simulator/start', simulatorController.startSimulator);
 app.post('/api/simulator/stop', simulatorController.stopSimulator);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+
+// Bootstrap Application: Load Secrets then Start Server
+const bootstrap = async () => {
+  try {
+    // In production, these names match GCP Secret Manager keys
+    await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'MAPS_API_KEY', 'OPENWEATHER_API_KEY']);
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Production Gateway running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('CRITICAL: Failed to bootstrap application:', err);
+    process.exit(1);
+  }
+};
+
+bootstrap();
 
 /* Mounted LAST: POST /api/shipments/analyze - keeps inline GET routes unblocked */
 app.use('/api/shipments', shipmentRoutes);

@@ -10,11 +10,9 @@ class FirebaseService {
   final FirebaseFirestore? _firestoreInternal;
 
   FirebaseFirestore get _firestore {
-    if (_firestoreInternal != null) return _firestoreInternal ?? FirebaseFirestore.instance;;
+    if (_firestoreInternal != null) return _firestoreInternal!;
     
-    if (!DashboardFirebaseOptions.enabled) {
-      // Return a dummy/mock or throw a better error if accessed.
-      // But we should really avoid accessing it if disabled.
+    if (!enabled) {
       throw StateError(
         'Firebase is not initialized. '
         'Enable it with --dart-define=ENABLE_FIREBASE=true',

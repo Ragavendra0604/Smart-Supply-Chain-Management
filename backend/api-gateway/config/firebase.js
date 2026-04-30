@@ -10,26 +10,23 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 if (!admin.apps.length) {
   try {
-    const configuredKeyPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-    const keyPath = configuredKeyPath
-      ? path.resolve(configuredKeyPath)
-      : path.resolve(__dirname, '../serviceAccountKey.json');
+    // Production (Cloud Run): Uses Application Default Credentials (ADC)
+    // Local: Uses serviceAccountKey.json if present
+    const keyPath = path.resolve(__dirname, '../serviceAccountKey.json');
 
     if (fs.existsSync(keyPath)) {
       const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
-
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
-
-      console.log('Firebase initialized with service account');
+      console.log('✅ Firebase initialized with Service Account Key');
     } else {
-      console.log('Using default credentials');
       admin.initializeApp();
+      console.log('✅ Firebase initialized with Application Default Credentials');
     }
   } catch (error) {
-    console.error('Firebase init error:', error.message);
-    process.exit(1);
+    console.error('❌ Firebase init error:', error.message);
+    // Don't exit process, let it try to continue or fail gracefully later
   }
 }
 
