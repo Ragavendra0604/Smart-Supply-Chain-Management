@@ -23,7 +23,10 @@ export const authMiddleware = async (req, res, next) => {
       });
     }
 
-    const idToken = authHeader.split('Bearer ')[1];
+    const idToken = authHeader.split('Bearer ')[1]?.trim();
+    if (!idToken) {
+       return res.status(401).json({ success: false, error: 'Unauthorized: Token missing' });
+    }
     const decodedToken = await auth().verifyIdToken(idToken);
     
     // Attach user context for downstream logic (RBAC, auditing)
@@ -34,7 +37,7 @@ export const authMiddleware = async (req, res, next) => {
     console.error(`[AUTH ERROR] Token verification failed: ${error.message}`);
     return res.status(401).json({ 
       success: false, 
-      error: 'Unauthorized: Invalid or expired token' 
+      error: `Unauthorized: ${error.message}` 
     });
   }
 };

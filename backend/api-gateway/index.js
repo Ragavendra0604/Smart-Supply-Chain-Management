@@ -238,7 +238,15 @@ const bootstrap = async () => {
   try {
     // In production, these names match GCP Secret Manager keys
     await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'MAPS_API_KEY', 'OPENWEATHER_API_KEY']);
-    initializeFirebase();
+    
+    // Initialize Firebase after secrets are loaded
+    try {
+      initializeFirebase();
+      console.log('✅ Firebase initialized successfully in bootstrap');
+    } catch (firebaseError) {
+      console.error('❌ Firebase initialization failed:', firebaseError.message);
+      throw firebaseError;
+    }
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Production Gateway running on port ${PORT}`);

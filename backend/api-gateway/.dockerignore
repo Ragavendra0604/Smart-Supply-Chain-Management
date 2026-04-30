@@ -1,8 +1,12 @@
 node_modules
 npm-debug.log
 serviceAccountKey.json
+firebase-admin-key.json
+firebase-admin-ssm-sb-key.json
+
 .env
 .git
 .gitignore
+
 README.md
 Dockerfile

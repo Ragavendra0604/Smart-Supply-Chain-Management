@@ -43,9 +43,13 @@ export const getSecret = async (secretName) => {
 export const loadSecrets = async (secretsList) => {
   console.log('🔐 Loading secrets from GCP Secret Manager...');
   for (const secret of secretsList) {
+    console.log(`Loading secret: ${secret}`);
     const value = await getSecret(secret);
     if (value) {
       process.env[secret] = value;
+      console.log(`✅ Loaded secret: ${secret}`);
+    } else {
+      console.log(`❌ Failed to load secret: ${secret}`);
     }
   }
   console.log('✅ Secrets loaded successfully.');

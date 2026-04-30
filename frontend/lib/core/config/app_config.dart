@@ -5,7 +5,7 @@ class AppConfig {
   static String get apiBaseUrl {
     const url = String.fromEnvironment(
       'API_BASE_URL',
-      defaultValue: 'https://api-gateway-835572562592.us-central1.run.app',
+      defaultValue: 'https://api-gateway-1026695506439.us-central1.run.app',
     );
 
     // Automatically handle Android emulator bridge if using default localhost

@@ -11,6 +11,8 @@ build/
 # Secrets and local configuration
 .env
 serviceAccountKey.json
+firebase-admin-ssm-sb-key.json
+firebase-admin-key.json
 local.properties
 frontend/android/local.properties
 *.pem

@@ -12,10 +12,25 @@ let firebaseInitialized = false;
 let firebaseApp = null;
 
 const createFirebaseCredential = () => {
+  console.log('🔑 Creating Firebase credential...');
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    console.log('✅ Firebase credential loaded from FIREBASE_SERVICE_ACCOUNT');
-    return admin.credential.cert(serviceAccount);
+    try {
+      let saContent = process.env.FIREBASE_SERVICE_ACCOUNT;
+      // Try to detect if it's base64 encoded
+      if (saContent.trim().startsWith('eyJ') || !saContent.trim().startsWith('{')) {
+        try {
+          saContent = Buffer.from(saContent, 'base64').toString('utf8');
+        } catch (e) {
+          // If decoding fails, stick with original and let JSON.parse fail
+        }
+      }
+      const serviceAccount = JSON.parse(saContent);
+      console.log('✅ Firebase credential loaded from FIREBASE_SERVICE_ACCOUNT');
+      return admin.credential.cert(serviceAccount);
+    } catch (error) {
+      console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', error.message);
+      throw error;
+    }
   }
 
   const keyPath = path.resolve(__dirname, '../serviceAccountKey.json');
@@ -34,9 +49,18 @@ export const initializeFirebase = () => {
     return firebaseApp;
   }
 
+  console.log('🔥 Initializing Firebase...');
   try {
     const credential = createFirebaseCredential();
-    firebaseApp = admin.initializeApp({ credential });
+    console.log('✅ Firebase credential created');
+    
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'ssm-sb';
+    console.log(`🎯 Initializing Firebase for project: ${projectId}`);
+    
+    firebaseApp = admin.initializeApp({ 
+      credential,
+      projectId: projectId
+    });
     firebaseInitialized = true;
     console.log('✅ Firebase initialized successfully');
   } catch (error) {
