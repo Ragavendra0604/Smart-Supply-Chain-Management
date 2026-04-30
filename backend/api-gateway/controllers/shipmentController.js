@@ -4,68 +4,82 @@ import weatherService from '../services/weatherService.js';
 import newsService from '../services/newsService.js';
 import aiService from '../services/aiService.js';
 
-const analyzeShipment = async (req, res) => {
-  try {
-    const { shipment_id } = req.body;
-    if (!shipment_id) return res.status(400).json({ error: 'shipment_id is required' });
+import aiService from '../services/aiService.js';
 
+/**
+ * Core Logic for AI Analysis - Can be run synchronously via API or asynchronously via Events
+ */
+const performAnalysis = async (shipment_id) => {
     const doc = await db.collection('shipments').doc(shipment_id).get();
-    if (!doc.exists) return res.status(404).json({ error: 'Shipment not found' });
+    if (!doc.exists) throw new Error('Shipment not found');
 
     const shipment = doc.data();
     const { origin, destination } = shipment;
 
-    // 1. Fetch data with absolute fallbacks
+    // 1. Fetch data from external APIs
     const [rawRoute, rawWeather, rawNews] = await Promise.all([
       mapsService.getRoute(origin, destination).catch(() => []),
       weatherService.getWeather(destination).catch(() => ({})),
       newsService.getNews(origin, destination).catch(() => []),
     ]);
 
-    // 2. Data Sanitization (Defensive Programming)
     const routeData = Array.isArray(rawRoute) ? rawRoute : [];
     const weatherData = (rawWeather && typeof rawWeather === 'object') ? rawWeather : {};
     const newsData = Array.isArray(rawNews) ? rawNews : [];
 
-    // 3. Create Lightweight Payload (Strip unnecessary heavy map points for AI)
-    const lightRouteData = routeData.map(route => ({
-      route_id: route.route_id || 'default',
-      summary: route.summary || 'Standard Route',
-      distance_meters: route.distance_meters || 0,
-      duration_seconds: route.duration_seconds || 0,
-      traffic_duration: route.traffic_duration || route.duration || '--',
-      traffic_duration_seconds: route.traffic_duration_seconds || route.duration_seconds || 0
-    }));
-
+    // 2. Prepare AI Payload
     const payload = {
-      routeData: lightRouteData,
+      routeData: routeData.map(route => ({
+        route_id: route.route_id || 'default',
+        summary: route.summary || 'Standard Route',
+        distance_meters: route.distance_meters || 0,
+        duration_seconds: route.duration_seconds || 0,
+        traffic_duration_seconds: route.traffic_duration_seconds || route.duration_seconds || 0
+      })),
       weatherData,
       newsData,
       source: shipment.origin,
       currentLocation: shipment.current_location || null
     };
 
-    // 4. Critical Runtime Debugging
-    console.log('--- [OUTGOING AI PAYLOAD] ---');
-    console.log('Shipment ID:', shipment_id);
-    console.log('Route Count:', payload.routeData.length, '| Type:', typeof payload.routeData);
-    console.log('Weather Status:', !!payload.weatherData.condition, '| Type:', typeof payload.weatherData);
-    console.log('News Articles:', payload.newsData.length, '| Type:', typeof payload.newsData);
-
-    // 5. Send to AI
+    // 3. Inference
     const aiResponse = await aiService.getPrediction(payload);
 
-    // 6. Persist results
+    // 4. Persistence (Correct Firestore Usage: Atomic Update)
     await db.collection('shipments').doc(shipment_id).update({
-      routeData, // Store full data (with path) in DB
-      weatherData,
-      newsData,
       aiResponse,
-      status: 'ANALYZED',
-      updated_at: new Date()
+      last_analyzed_at: new Date(),
+      status: 'ANALYZED'
     });
 
-    res.json({ success: true, aiResponse });
+    // 5. Data Pipeline (The "Learning System" Foundation)
+    // Log the interaction for future model training/fine-tuning
+    await db.collection('analytics_logs').add({
+      shipment_id,
+      payload_hash: Buffer.from(JSON.stringify(payload)).toString('base64').substring(0, 32),
+      prediction: aiResponse.delay_prediction,
+      risk_score: aiResponse.risk_score,
+      timestamp: new Date()
+    });
+
+    return aiResponse;
+};
+
+const runAsyncAnalysis = async (shipment_id) => {
+  try {
+    await performAnalysis(shipment_id);
+  } catch (err) {
+    console.error(`[ASYNC ANALYZER] Failed for ${shipment_id}:`, err.message);
+  }
+};
+
+const analyzeShipment = async (req, res) => {
+  try {
+    const { shipment_id } = req.body;
+    if (!shipment_id) return res.status(400).json({ error: 'shipment_id is required' });
+
+    const result = await performAnalysis(shipment_id);
+    res.json({ success: true, aiResponse: result });
 
   } catch (error) {
     console.error('SYSTEM ERROR in analyzeShipment:', error);
@@ -73,4 +87,4 @@ const analyzeShipment = async (req, res) => {
   }
 };
 
-export default { analyzeShipment };
+export default { analyzeShipment, runAsyncAnalysis };

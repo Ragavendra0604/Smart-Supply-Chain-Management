@@ -14,6 +14,8 @@ import {
   validateLocationUpdate,
   validateShipmentLookup
 } from './utils/validation.js';
+import { authMiddleware } from './middleware/authMiddleware.js';
+import { eventManager } from './services/eventService.js';
 
 dotenv.config();
 
@@ -41,8 +43,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-/* ---------------- LIST SHIPMENTS ---------------- */
-app.get('/api/shipments', async (req, res) => {
+/* ---------------- LIST SHIPMENTS (PROTECTED) ---------------- */
+app.get('/api/shipments', authMiddleware, async (req, res) => {
   try {
     const snapshot = await db
       .collection('shipments')
@@ -61,8 +63,8 @@ app.get('/api/shipments', async (req, res) => {
   }
 });
 
-/* ---------------- GET LOGISTICS STATS ---------------- */
-app.get('/api/stats', async (req, res) => {
+/* ---------------- GET LOGISTICS STATS (PROTECTED) ---------------- */
+app.get('/api/stats', authMiddleware, async (req, res) => {
   try {
     const snapshot = await db.collection('shipments').get();
     
@@ -109,8 +111,8 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-/* ---------------- GET SHIPMENT ---------------- */
-app.get('/api/shipments/:shipment_id', async (req, res) => {
+/* ---------------- GET SHIPMENT (PROTECTED) ---------------- */
+app.get('/api/shipments/:shipment_id', authMiddleware, async (req, res) => {
   try {
     const validation = validateShipmentLookup(req.params.shipment_id);
 
@@ -137,8 +139,8 @@ app.get('/api/shipments/:shipment_id', async (req, res) => {
   }
 });
 
-/* ---------------- CREATE SHIPMENT ---------------- */
-app.post('/create-shipment', async (req, res) => {
+/* ---------------- CREATE SHIPMENT (PROTECTED) ---------------- */
+app.post('/create-shipment', authMiddleware, async (req, res) => {
   try {
     const validation = validateCreateShipment(req.body);
 
@@ -166,8 +168,8 @@ app.post('/create-shipment', async (req, res) => {
   }
 });
 
-/* ---------------- UPDATE LOCATION ---------------- */
-app.post('/update-location', async (req, res) => {
+/* ---------------- UPDATE LOCATION (PROTECTED) ---------------- */
+app.post('/update-location', authMiddleware, async (req, res) => {
   try {
     const validation = validateLocationUpdate(req.body);
 
@@ -188,6 +190,9 @@ app.post('/update-location', async (req, res) => {
       status: 'IN_TRANSIT',
       updated_at: new Date()
     });
+
+    // Fire-and-forget: Trigger AI analysis asynchronously via Event Pipeline
+    eventManager.emitLocationUpdate(shipment_id, { lat, lng });
 
     res.json({ success: true });
 

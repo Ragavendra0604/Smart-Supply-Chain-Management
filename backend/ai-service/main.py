@@ -6,6 +6,9 @@ from google import genai
 from typing import List, Dict, Any, Optional
 import google.auth
 import json
+import joblib
+import pandas as pd
+from datetime import datetime
 
 app = FastAPI()
 
@@ -37,6 +40,67 @@ client = genai.Client(
     project=project_id,
     location="us-central1"
 )
+
+# -------- ML MODEL LOADING --------
+MODEL_PATH = "delay_model.pkl"
+try:
+    ml_model = joblib.load(MODEL_PATH)
+    print(f"✅ Production ML Model loaded from {MODEL_PATH}")
+except Exception as e:
+    print(f"❌ Error loading ML model: {e}")
+    ml_model = None
+
+def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any]) -> float:
+    """
+    Uses the trained RandomForest model to predict delay in minutes.
+    Features: traffic_level, weather_condition, distance_km, time_of_day, day_of_week
+    """
+    if ml_model is None:
+        return 0.0
+        
+    try:
+        # 1. Traffic Level (0-5)
+        base_dur = route.get("duration_seconds") or 1
+        traffic_dur = route.get("traffic_duration_seconds") or base_dur
+        delay_ratio = (traffic_dur - base_dur) / base_dur
+        
+        if delay_ratio < 0.05: traffic_lvl = 0
+        elif delay_ratio < 0.15: traffic_lvl = 1
+        elif delay_ratio < 0.30: traffic_lvl = 2
+        elif delay_ratio < 0.50: traffic_lvl = 3
+        elif delay_ratio < 0.80: traffic_lvl = 4
+        else: traffic_lvl = 5
+        
+        # 2. Weather Condition (0-4)
+        cond = (weather.get("condition") or "clear").lower()
+        if any(x in cond for x in ["storm", "thunderstorm", "tornado", "squall"]): w_val = 4
+        elif any(x in cond for x in ["snow", "blizzard"]): w_val = 2
+        elif any(x in cond for x in ["fog", "haze", "mist"]): w_val = 3
+        elif any(x in cond for x in ["rain", "drizzle"]): w_val = 1
+        else: w_val = 0
+        
+        # 3. Distance
+        dist_km = (route.get("distance_meters") or 0) / 1000.0
+        
+        # 4. Time/Day
+        now = datetime.now()
+        hr = now.hour
+        dow = now.weekday()
+        
+        # Prepare feature vector
+        features = pd.DataFrame([{
+            'traffic_level': traffic_lvl,
+            'weather_condition': w_val,
+            'distance_km': dist_km,
+            'time_of_day': hr,
+            'day_of_week': dow
+        }])
+        
+        prediction = ml_model.predict(features)[0]
+        return round(float(prediction), 2)
+    except Exception as e:
+        print(f"ML Prediction Error: {e}")
+        return 0.0
 
 # -------- INPUT MODEL --------
 # All fields are Optional[...] = None so that Node.js sending `null`
@@ -106,85 +170,25 @@ def calculate_costs(distance_meters, duration_seconds):
     }
 
 
-def calculate_risk(route: Dict[str, Any], weather: Dict[str, Any], news: List[Any]) -> float:
+def calculate_risk_ml(route: Dict[str, Any], weather: Dict[str, Any], predicted_delay_mins: float) -> float:
     """
-    Multi-factor risk scoring combining:
-    - Traffic delay ratio
-    - Weather severity
-    - Wind speed hazard
-    - Temperature extremes
-    - News disruption signals
+    Advanced Risk Scoring based on ML Predicted Delay + Weather Severity.
     """
-    base = route.get("duration_seconds") or 0
-    traffic = route.get("traffic_duration_seconds") or base
-    delay = traffic - base
     risk = 0.0
-
-    # --- Traffic Delay ---
-    if base > 0:
-        delay_ratio = delay / base
-        # Heavier weighting for traffic delays: max 0.45 from traffic
-        risk += min(delay_ratio * 0.8, 0.45) 
-    elif delay > 0:
-        risk += min(delay / 1200.0, 0.45)
-
-    # --- Weather Condition ---
+    
+    # 1. Predicted Delay Risk (0.0 to 0.6)
+    # If predicted delay is > 60 mins, it's high risk
+    risk += min(predicted_delay_mins / 60.0, 0.6)
+    
+    # 2. Weather Criticality (0.0 to 0.4)
     condition = (weather.get("condition") or "").lower()
-    weather_risk_map = {
-        "thunderstorm": 0.40,
-        "storm": 0.35,
-        "snow": 0.30,
-        "blizzard": 0.40,
-        "fog": 0.25,
-        "rain": 0.20,
-        "drizzle": 0.10,
-        "haze": 0.10,
-        "dust": 0.15,
-        "sand": 0.15,
-        "ash": 0.20,
-        "squall": 0.25,
-        "tornado": 0.50,
-    }
-    for key, val in weather_risk_map.items():
-        if key in condition:
-            risk += val
-            break
-
-    # --- Wind Speed ---
-    wind_speed = float(weather.get("windSpeed") or 0)
-    if wind_speed > 60:
-        risk += 0.20
-    elif wind_speed > 40:
-        risk += 0.12
-    elif wind_speed > 20:
-        risk += 0.05
-
-    # --- Temperature Extremes ---
-    temp = float(weather.get("temperature") or 20)
-    if temp > 45 or temp < -10:
-        risk += 0.10
-    elif temp > 38 or temp < 0:
-        risk += 0.05
-
-    # --- News Disruptions ---
-    disruption_keywords = [
-        "accident", "crash", "closure", "blocked", "strike",
-        "flood", "protest", "evacuation", "disaster", "delay",
-        "road closed", "highway shut", "bridge collapse"
-    ]
-    news_risk_count = 0
-    for article in news:
-        title = (article.get("title") or "").lower()
-        if any(kw in title for kw in disruption_keywords):
-            news_risk_count += 1
-
-    if news_risk_count >= 3:
+    if any(x in condition for x in ["storm", "tornado", "blizzard", "squall"]):
+        risk += 0.4
+    elif any(x in condition for x in ["snow", "fog", "heavy rain"]):
         risk += 0.25
-    elif news_risk_count == 2:
-        risk += 0.15
-    elif news_risk_count == 1:
-        risk += 0.08
-
+    elif any(x in condition for x in ["rain", "haze"]):
+        risk += 0.1
+        
     return round(min(risk, 1.0), 2)
 
 
@@ -326,6 +330,10 @@ Keep your response professional, clear, and actionable. Use 3-4 sentences maximu
 
 @app.post("/predict")
 def predict(data: InputData):
+    """
+    Production Endpoint: Analyzes shipment routes using a trained RandomForest model
+    and generates AI reasoning via Gemini.
+    """
     try:
         print("Incoming AI request")
         print(f"  Routes: {len(data.routeData)} | Weather: {bool(data.weatherData)} | News: {len(data.newsData)}")
@@ -372,7 +380,12 @@ def predict(data: InputData):
         scored_routes = []
 
         for route in routes:
-            risk = calculate_risk(route, weather, news)
+            # Predict delay using ML model
+            predicted_delay = get_ml_delay_prediction(route, weather)
+            
+            # Calculate Risk using ML prediction
+            risk = calculate_risk_ml(route, weather, predicted_delay)
+            
             costs = calculate_costs(
                 route.get("distance_meters"),
                 route.get("traffic_duration_seconds") or route.get("duration_seconds")
@@ -386,6 +399,7 @@ def predict(data: InputData):
                 **route,
                 "risk_score": risk,
                 "risk_level": get_risk_level(risk),
+                "predicted_delay_mins": predicted_delay,
                 "costs": costs,
                 "score": score
             })
@@ -418,8 +432,7 @@ def predict(data: InputData):
         cost_saved = round(current_costs["total_cost"] - best["costs"]["total_cost"], 2)
 
         # -------- DELAY PREDICTION --------
-        best_base_sec = best.get("duration_seconds") or 0
-        delay_mins = max(0, (best_time_sec - best_base_sec) // 60)
+        delay_mins = best["predicted_delay_mins"]
 
         # -------- RISK-BASED ALERT --------
         risk_level = best["risk_level"]

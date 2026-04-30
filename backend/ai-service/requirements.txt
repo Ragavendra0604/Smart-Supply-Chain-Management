@@ -3,3 +3,7 @@ uvicorn
 pydantic
 google-genai
 google-auth
+pandas
+scikit-learn
+joblib
+numpy

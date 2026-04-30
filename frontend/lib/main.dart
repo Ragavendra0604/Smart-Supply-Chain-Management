@@ -10,6 +10,9 @@ import 'services/ai_service.dart';
 import 'services/api_service.dart';
 import 'services/firebase_service.dart';
 import 'services/location_service.dart';
+import 'services/auth_service.dart';
+import 'controllers/auth_controller.dart';
+import 'modules/auth/login_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +23,8 @@ Future<void> main() async {
     );
   }
 
-  final apiService = ApiService();
+  final authService = AuthService();
+  final apiService = ApiService(getToken: authService.getIdToken);
   final firebaseService = FirebaseService();
   final aiService = AiService(apiService);
   final locationService = LocationService(apiService);
@@ -28,6 +32,9 @@ Future<void> main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(
+          create: (_) => AuthController(authService: authService),
+        ),
         ChangeNotifierProvider(
           create: (_) => DashboardController(
             apiService: apiService,
@@ -51,7 +58,22 @@ class LogisticsDashboardApp extends StatelessWidget {
       title: 'Smart Logistics',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      home: const MainNavigationWrapper(),
+      home: const AuthWrapper(),
     );
+  }
+}
+
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authController = context.watch<AuthController>();
+
+    if (authController.isAuthenticated) {
+      return const MainNavigationWrapper();
+    } else {
+      return const LoginScreen();
+    }
   }
 }
