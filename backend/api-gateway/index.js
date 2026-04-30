@@ -23,8 +23,8 @@ import { processIdempotentRequest } from './utils/idempotency.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(securityHeaders);
-app.use(rateLimiter);
 app.use(cors(corsOptions));
+app.use(rateLimiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -246,7 +246,7 @@ const PORT = process.env.PORT || 5000;
 const bootstrap = async () => {
   try {
     // In production, these names match GCP Secret Manager keys
-    await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'MAPS_API_KEY', 'OPENWEATHER_API_KEY']);
+    await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'GOOGLE_MAPS_API_KEY', 'WEATHER_API_KEY', 'NEWS_API_KEY']);
 
     // Initialize Firebase after secrets are loaded
     try {
