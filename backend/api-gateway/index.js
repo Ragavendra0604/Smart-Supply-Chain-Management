@@ -34,12 +34,29 @@ app.use(express.static(path.join(__dirname, 'public')));
 ----------------------------------------------------------------------- */
 
 /* ---------------- HEALTH ---------------- */
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    service: 'smart-supply-chain-api',
-    timestamp: new Date().toISOString()
-  });
+app.get('/health', async (req, res) => {
+  try {
+    initializeFirebase();
+
+    // Basic Firestore check without writing data.
+    await db().collection('test').doc('health-check').get();
+
+    res.json({
+      success: true,
+      service: 'smart-supply-chain-api',
+      timestamp: new Date().toISOString(),
+      firebase: 'ok',
+      firestore: 'ok'
+    });
+  } catch (error) {
+    console.error('[HEALTH CHECK ERROR]', error.message);
+    res.status(500).json({
+      success: false,
+      service: 'smart-supply-chain-api',
+      timestamp: new Date().toISOString(),
+      error: error.message
+    });
+  }
 });
 
 /* ---------------- LIST SHIPMENTS (PROTECTED) ---------------- */
