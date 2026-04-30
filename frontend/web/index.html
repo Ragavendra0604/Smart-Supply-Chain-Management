@@ -33,34 +33,7 @@
   <title>Logistics Risk Monitor</title>
   <link rel="manifest" href="manifest.json">
   <!-- Replace the key below before running Flutter Web with Google Maps. -->
-  <script>
-    (function() {
-      // 1. Try to load from local config first (for local development)
-      // 2. Fallback to placeholder (for GitHub build injection)
-      const placeholder = "{{GOOGLE_MAPS_API_KEY}}";
-      
-      function loadMaps(key) {
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${key}`;
-        document.head.appendChild(script);
-      }
-
-      fetch('maps_config.json')
-        .then(response => response.json())
-        .then(config => {
-          console.log('📍 Loading Google Maps with local config');
-          loadMaps(config.key);
-        })
-        .catch(() => {
-          if (!placeholder.startsWith('{{')) {
-            console.log('📍 Loading Google Maps with production key');
-            loadMaps(placeholder);
-          } else {
-            console.error('❌ Google Maps API Key missing! Check local maps_config.json or GitHub Secrets.');
-          }
-        });
-    })();
-  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key={{GOOGLE_MAPS_API_KEY}}"></script>
 </head>
 
 <body>

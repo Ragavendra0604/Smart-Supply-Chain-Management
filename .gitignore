@@ -15,7 +15,6 @@ firebase-admin-ssm-sb-key.json
 firebase-admin-key.json
 local.properties
 frontend/android/local.properties
-frontend/web/maps_config.json
 *.pem
 *.key
 
