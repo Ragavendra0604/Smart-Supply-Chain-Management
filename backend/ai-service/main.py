@@ -97,7 +97,108 @@ class InputData(BaseModel):
     source: Optional[str] = None
     mode: Optional[str] = "ROAD" # NEW: Multi-modal support
 
-# [Validation/Helper methods omitted for brevity - keeping logic identical to main.py but using V3]
+# -------- GENERATIVE AI INSIGHTS --------
+def generate_logistics_insight(prediction: float, data: InputData) -> str:
+    """
+    Uses Gemini 2.0 Flash to explain the risk and suggest tactical moves.
+    """
+    if client is None:
+        return "Insight unavailable (AI connection pending)."
+
+    try:
+        # Construct the context for Gemini
+        mode = data.mode
+        weather = data.weatherData or {}
+        news = data.newsData or []
+        
+        prompt = fprompt = f"""
+            You are a Senior Logistics Strategy Consultant at Google, specializing in real-time supply chain optimization and disruption management.
+
+            ---
+
+            ## CONTEXT
+            - Transport Mode: {mode}
+            - Predicted Delay: {prediction} minutes
+            - Destination Weather: {weather.get('condition', 'Unknown')} ({weather.get('temperature', 'N/A')}°C)
+            - News Alerts (Top Signals): {json.dumps(news[:2])}
+
+            ---
+
+            ## OBJECTIVE
+            Generate a precise, data-driven, and operationally actionable recommendation for a logistics manager managing time-sensitive shipments.
+
+            ---
+
+            ## OUTPUT STRUCTURE (STRICT)
+
+            Provide EXACTLY 10–12 sentences. Follow this structure:
+
+            1. **Root Cause Analysis**  
+            Clearly explain the most likely cause of the delay by correlating traffic, weather, and external disruptions.
+
+            2. **Primary Risk Assessment**  
+            Quantify severity (Low / Medium / High) and explain operational impact.
+
+            3. **Immediate Action Recommendation**  
+            Suggest ONE clear action:
+            - Reroute
+            - Mode switch (Road → Air/Sea)
+            - Delay departure
+            - Maintain route (if safe)
+
+            4. **Alternative Strategy**  
+            Provide a secondary fallback option.
+
+            5. **Time Impact Justification**  
+            Explain how your recommendation reduces delay or risk.
+
+            6. **Operational Considerations**  
+            Mention cost, fuel, compliance, or resource implications.
+
+            7. **Geographical / Route Insight**  
+            Highlight any route-specific or region-specific risk patterns.
+
+            8. **Predictive Insight**  
+            Briefly mention how conditions may evolve in next few hours.
+
+            9. **Confidence Level**  
+            State confidence (e.g., "Confidence: 78%") based on data reliability.
+
+            10. **Final Executive Summary**  
+            One strong concluding sentence for decision-making.
+
+            ---
+
+            ## STYLE REQUIREMENTS
+
+            - Professional, concise, and authoritative
+            - No generic advice
+            - No repetition
+            - Avoid vague statements like "it may" or "possibly"
+            - Use deterministic, decision-ready language
+            - Focus on real logistics impact
+
+            ---
+
+            ## IMPORTANT
+
+            - Base reasoning ONLY on provided data
+            - Do NOT hallucinate unknown data
+            - Prioritize actionability over explanation
+
+            ---
+
+            Now generate the recommendation.
+            """
+        
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Gemini Insight Error: {e}")
+        return "Strategizing ongoing... (Insight delayed)"
 
 @app.post("/predict")
 def predict(data: InputData):
@@ -125,12 +226,16 @@ def predict(data: InputData):
         scored_routes.sort(key=lambda x: x["predicted_delay_mins"])
         best = scored_routes[0]
 
+        # NEW: Generate Gemini Insight for the best route
+        insight = generate_logistics_insight(best["predicted_delay_mins"], data)
+
         return {
             "success": True,
             "risk_score": best["risk_score"],
             "risk_level": "HIGH" if best["risk_score"] > 0.7 else "MEDIUM" if best["risk_score"] > 0.3 else "LOW",
             "delay_prediction": f"{best['predicted_delay_mins']} mins",
             "suggestion": f"Optimal {data.mode} route via '{best.get('summary')}' selected.",
+            "insight": insight,
             "all_routes": scored_routes
         }
     except Exception as e:
@@ -138,4 +243,4 @@ def predict(data: InputData):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "model_version": "v3-xgboost"}
+    return {"status": "ok", "model_version": "v3-xgboost-gemini-v1"}

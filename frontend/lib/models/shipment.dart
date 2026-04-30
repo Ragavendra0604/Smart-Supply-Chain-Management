@@ -225,7 +225,7 @@ class ShipmentAiInsight {
       riskLevel: stringValue(data['risk_level'], fallback: 'UNKNOWN'),
       delayPrediction: stringValue(data['delay_prediction'], fallback: '--'),
       suggestion: stringValue(data['suggestion'], fallback: 'Awaiting recommendation'),
-      explanation: stringValue(data['explanation'], fallback: ''),
+      explanation: stringValue(data['insight'] ?? data['explanation'], fallback: ''),
       optimization: data['optimization_data'] != null
           ? ShipmentOptimizationData.fromMap(mapValue(data['optimization_data']))
           : null,
