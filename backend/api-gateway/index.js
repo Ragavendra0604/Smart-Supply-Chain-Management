@@ -60,7 +60,7 @@ app.get('/health', async (req, res) => {
 });
 
 /* ---------------- LIST SHIPMENTS (PROTECTED) ---------------- */
-app.get('/api/shipments', authMiddleware, async (req, res) => {
+app.get('/api/shipments', rateLimiter, authMiddleware, async (req, res) => {
   try {
     const snapshot = await db()
       .collection('shipments')
@@ -80,7 +80,7 @@ app.get('/api/shipments', authMiddleware, async (req, res) => {
 });
 
 /* ---------------- GET LOGISTICS STATS (PROTECTED) ---------------- */
-app.get('/api/stats', authMiddleware, async (req, res) => {
+app.get('/api/stats', rateLimiter, authMiddleware, async (req, res) => {
   try {
     const snapshot = await db().collection('shipments').get();
 

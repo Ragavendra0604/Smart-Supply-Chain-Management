@@ -8,6 +8,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+import java.util.Properties
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+
 android {
     namespace = "com.ssm.logistics_dashboard"
     compileSdk = flutter.compileSdkVersion
@@ -29,7 +37,8 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
-            (project.findProperty("GOOGLE_MAPS_API_KEY") as String?)
+            localProperties.getProperty("GOOGLE_MAPS_API_KEY")
+                ?: (project.findProperty("GOOGLE_MAPS_API_KEY") as String?)
                 ?: "REPLACE_WITH_GOOGLE_MAPS_API_KEY"
     }
 

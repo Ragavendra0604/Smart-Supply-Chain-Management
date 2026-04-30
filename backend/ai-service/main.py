@@ -239,7 +239,8 @@ def predict(data: InputData):
             "all_routes": scored_routes
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"Prediction Error: {str(e)}") # Log for internal debugging
+        return {"success": False, "error": "An internal error occurred during prediction analysis."}
 
 @app.get("/health")
 def health():

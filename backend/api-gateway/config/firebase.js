@@ -12,7 +12,7 @@ let firebaseInitialized = false;
 let firebaseApp = null;
 
 const createFirebaseCredential = () => {
-  console.log('🔑 Creating Firebase credential...');
+  console.log('Creating Firebase credential...');
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
       let saContent = process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -25,10 +25,10 @@ const createFirebaseCredential = () => {
         }
       }
       const serviceAccount = JSON.parse(saContent);
-      console.log('✅ Firebase credential loaded from FIREBASE_SERVICE_ACCOUNT');
+      console.log('Firebase credential loaded from FIREBASE_SERVICE_ACCOUNT');
       return admin.credential.cert(serviceAccount);
     } catch (error) {
-      console.error('❌ Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', error.message);
+      console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', error.message);
       throw error;
     }
   }
@@ -36,11 +36,11 @@ const createFirebaseCredential = () => {
   const keyPath = path.resolve(__dirname, '../serviceAccountKey.json');
   if (fs.existsSync(keyPath)) {
     const serviceAccount = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
-    console.log('✅ Firebase credential loaded from local serviceAccountKey.json');
+    console.log('Firebase credential loaded from local serviceAccountKey.json');
     return admin.credential.cert(serviceAccount);
   }
 
-  console.log('✅ No local service account found, using Application Default Credentials');
+  console.log('No local service account found, using Application Default Credentials');
   return admin.credential.applicationDefault();
 };
 
@@ -49,22 +49,22 @@ export const initializeFirebase = () => {
     return firebaseApp;
   }
 
-  console.log('🔥 Initializing Firebase...');
+  console.log('Initializing Firebase...');
   try {
     const credential = createFirebaseCredential();
-    console.log('✅ Firebase credential created');
-    
+    console.log('Firebase credential created');
+
     const projectId = process.env.GOOGLE_CLOUD_PROJECT || 'ssm-sb';
-    console.log(`🎯 Initializing Firebase for project: ${projectId}`);
-    
-    firebaseApp = admin.initializeApp({ 
+    console.log(`Initializing Firebase for project: ${projectId}`);
+
+    firebaseApp = admin.initializeApp({
       credential,
       projectId: projectId
     });
     firebaseInitialized = true;
-    console.log('✅ Firebase initialized successfully');
+    console.log('Firebase initialized successfully');
   } catch (error) {
-    console.error('❌ Firebase init error:', error.message);
+    console.error('Firebase init error:', error.message);
     throw error;
   }
 

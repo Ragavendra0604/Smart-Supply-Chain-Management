@@ -71,7 +71,7 @@ const runAsyncAnalysis = async (shipment_id) => {
   try {
     await performAnalysis(shipment_id);
   } catch (err) {
-    console.error(`[PIPELINE ERROR] ${shipment_id}:`, err.message);
+    console.error('[PIPELINE ERROR] %s:', shipment_id, err.message);
   }
 };
 

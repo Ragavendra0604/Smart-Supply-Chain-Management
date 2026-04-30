@@ -12,7 +12,7 @@ export const processIdempotentEvent = async (eventId, processingLogic) => {
       const doc = await transaction.get(eventRef);
 
       if (doc.exists) {
-        console.log(`[IDEMPOTENCY] Event ${eventId} already processed. Skipping.`);
+        console.log('[IDEMPOTENCY] Event %s already processed. Skipping.', eventId);
         return { success: true, processed: false };
       }
 
@@ -34,7 +34,7 @@ export const processIdempotentEvent = async (eventId, processingLogic) => {
       return { success: true, processed: true, result };
     });
   } catch (error) {
-    console.error(`[IDEMPOTENCY ERROR] Event ${eventId} failed:`, error.message);
+    console.error('[IDEMPOTENCY ERROR] Event %s failed:', eventId, error.message);
     // In a real system, this would move to a Dead Letter Queue (DLQ)
     await eventRef.set({ status: 'FAILED', error: error.message }, { merge: true });
     throw error;
