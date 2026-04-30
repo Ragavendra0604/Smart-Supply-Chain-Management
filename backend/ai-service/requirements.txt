@@ -8,3 +8,5 @@ scikit-learn
 joblib
 numpy
 xgboost
+google-cloud-storage
+google-cloud-firestore

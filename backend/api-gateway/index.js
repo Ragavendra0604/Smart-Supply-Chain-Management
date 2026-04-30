@@ -18,6 +18,8 @@ import { authMiddleware } from './middleware/authMiddleware.js';
 import { eventManager } from './services/eventService.js';
 import { loadSecrets } from './services/secretService.js';
 import mapsService from './services/mapsService.js';
+import { processIdempotentRequest } from './utils/idempotency.js';
+import { eventManager } from './services/eventService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -228,6 +230,35 @@ app.post('/update-location', authMiddleware, async (req, res) => {
   }
 });
 
+app.post('/update-location', authMiddleware, async (req, res) => {
+  try {
+    const idempotencyKey = req.headers['x-idempotency-key'];
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'x-idempotency-key header required' });
+    }
+    const { shipment_id, lat, lng } = req.body;
+    const result = await processIdempotentRequest(idempotencyKey, async () => {
+      // 1. Fast path: update location in Firestore instantly
+      const shipmentRef = db().collection('shipments').doc(shipment_id);
+      await shipmentRef.update({
+        current_location: { lat, lng },
+        status: 'IN_TRANSIT',
+        updated_at: new Date()
+      });
+      // 2. Publish async event for heavy AI processing
+      await eventManager.publishEvent('shipment.location_updated', { shipment_id, lat, lng });
+
+      // 3. Log telemetry to BigQuery
+      await eventManager.logToBigQuery(shipment_id, 'LOCATION_UPDATE', { lat, lng });
+      return { success: true, message: 'Location updated, AI analysis queued.' };
+    });
+    // 202 Accepted: The request has been accepted for processing
+    res.status(202).json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 /* ---------------- TEST FIRESTORE ---------------- */
 app.get('/test-db', async (req, res) => {
   try {
@@ -249,7 +280,7 @@ const bootstrap = async () => {
   try {
     // In production, these names match GCP Secret Manager keys
     await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'MAPS_API_KEY', 'OPENWEATHER_API_KEY']);
-    
+
     // Initialize Firebase after secrets are loaded
     try {
       initializeFirebase();

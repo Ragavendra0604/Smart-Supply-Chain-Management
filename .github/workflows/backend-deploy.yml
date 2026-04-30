@@ -35,6 +35,8 @@ jobs:
         id: deploy-gateway
         uses: 'google-github-actions/deploy-cloudrun@v2'
         with:
+          project-id: ssm-sb
+          no_traffic: false
           service: 'api-gateway'
           region: 'us-central1'
           source: './backend/api-gateway'
@@ -51,9 +53,12 @@ jobs:
         with:
           service: 'ai-service'
           region: 'us-central1'
+          project-id: ssm-sb
+          no_traffic: false
           source: './backend/ai-service'
           env_vars: |
             GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
+            MODEL_BUCKET=logistics-models-prod
 
       - name: 'Show Output URLs'
         run: |

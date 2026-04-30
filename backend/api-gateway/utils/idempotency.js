@@ -1,42 +1,36 @@
 import { db } from '../config/firebase.js';
 
 /**
- * Idempotent Event Processor
- * Ensures each event is processed exactly once by checking a processed_events collection.
+ * Production Idempotency check using Firestore transactions.
+ * Client must send a unique UUIDv4 per action.
  */
-export const processIdempotentEvent = async (eventId, processingLogic) => {
-  const eventRef = db().collection('processed_events').doc(eventId);
-
-  try {
-    return await db().runTransaction(async (transaction) => {
-      const doc = await transaction.get(eventRef);
-
-      if (doc.exists) {
-        console.log('[IDEMPOTENCY] Event %s already processed. Skipping.', eventId);
-        return { success: true, processed: false };
-      }
-
-      // Mark as processing
-      transaction.set(eventRef, {
-        processed_at: new Date(),
-        status: 'PROCESSING'
-      });
-
-      // Execute actual business logic
-      const result = await processingLogic();
-
-      // Update to COMPLETED
-      transaction.update(eventRef, {
-        status: 'COMPLETED',
-        result: result || null
-      });
-
-      return { success: true, processed: true, result };
-    });
-  } catch (error) {
-    console.error('[IDEMPOTENCY ERROR] Event %s failed:', eventId, error.message);
-    // In a real system, this would move to a Dead Letter Queue (DLQ)
-    await eventRef.set({ status: 'FAILED', error: error.message }, { merge: true });
-    throw error;
+export const processIdempotentRequest = async (idempotencyKey, processorFn) => {
+  if (!idempotencyKey) {
+    throw new Error('Idempotency key is required for mutation operations.');
   }
+
+  const ref = db().collection('idempotency_keys').doc(idempotencyKey);
+
+  return await db().runTransaction(async (t) => {
+    const doc = await t.get(ref);
+    if (doc.exists) {
+      console.log(`[IDEMPOTENCY] Key ${idempotencyKey} already processed. Returning cached result.`);
+      return doc.data().result; // Return previous successful response
+    }
+
+    // Process the actual business logic
+    const result = await processorFn();
+
+    // Store the result with a TTL (requires Firestore TTL policy on 'expiresAt')
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + 24); // Keep for 24h
+
+    t.set(ref, {
+      processedAt: new Date(),
+      result,
+      expiresAt
+    });
+
+    return result;
+  });
 };

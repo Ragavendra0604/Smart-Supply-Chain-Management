@@ -74,15 +74,36 @@ const getRoute = async (origin, destination) => {
 //   return [{
 //     route_id: 'route_0',
 //     summary: `${origin} to ${destination}`,
-//     distance: `${Math.round(distanceData.distance_meters / 1000)} km`,
-//     distance_meters: distanceData.distance_meters,
-//     duration: `${Math.round(distanceData.duration_seconds / 3600)} hours`,
-//     duration_seconds: distanceData.duration_seconds,
-//     traffic_duration: `${Math.round(distanceData.duration_seconds / 3600)} hours`,
-//     traffic_duration_seconds: distanceData.duration_seconds,
-//     path: [], // No polyline available in fallback
-//     source: 'fallback'
-//   }];
-// };
+const getDefaultRoute = (origin, destination) => {
+  // Calculate approximate distance based on location names (fallback)
+  const distances = {
+    'Chennai-Bangalore': { distance_meters: 350000, duration_seconds: 18000 },
+    'Mumbai-Delhi': { distance_meters: 1450000, duration_seconds: 68400 },
+    'Bangalore-Hyderabad': { distance_meters: 565000, duration_seconds: 29400 },
+    'Chennai-Hyderabad': { distance_meters: 620000, duration_seconds: 32400 },
+  };
+
+  const key = `${origin}-${destination}`;
+  const distanceData = distances[key] || {
+    distance_meters: 500000 + Math.random() * 500000,
+    duration_seconds: 25200 + Math.random() * 25200
+  };
+
+  return [{
+    route_id: 'route_0',
+    summary: `${origin} to ${destination}`,
+    distance: `${Math.round(distanceData.distance_meters / 1000)} km`,
+    distance_meters: distanceData.distance_meters,
+    duration: `${Math.round(distanceData.duration_seconds / 3600)} hours`,
+    duration_seconds: distanceData.duration_seconds,
+    traffic_duration: `${Math.round(distanceData.duration_seconds / 3600)} hours`,
+    traffic_duration_seconds: distanceData.duration_seconds,
+    path: [
+      { lat: 13.0827, lng: 80.2707 }, // Mock Chennai
+      { lat: 12.9716, lng: 77.5946 }  // Mock Bangalore
+    ],
+    source: 'fallback'
+  }];
+};
 
 export default { getRoute };
