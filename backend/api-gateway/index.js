@@ -19,7 +19,6 @@ import { eventManager } from './services/eventService.js';
 import { loadSecrets } from './services/secretService.js';
 import mapsService from './services/mapsService.js';
 import { processIdempotentRequest } from './utils/idempotency.js';
-import { eventManager } from './services/eventService.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
