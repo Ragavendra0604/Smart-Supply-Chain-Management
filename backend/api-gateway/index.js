@@ -260,7 +260,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
     if (!idempotencyKey) {
       return res.status(400).json({ error: 'x-idempotency-key header required' });
     }
-    const { shipment_id, lat, lng } = req.body;
+    const { shipment_id, lat, lng, trigger_ai = true } = req.body;
     const result = await processIdempotentRequest(idempotencyKey, async () => {
       // 1. Fast path: update location in Firestore instantly
       const shipmentRef = db().collection('shipments').doc(shipment_id);
@@ -269,8 +269,14 @@ app.post('/update-location', authMiddleware, async (req, res) => {
         status: 'IN_TRANSIT',
         updated_at: new Date()
       });
-      // 2. Publish async event for heavy AI processing
-      await eventManager.publishEvent('shipment.location_updated', { shipment_id, lat, lng });
+
+      // 2. Conditional AI Trigger (Checkpoint Logic)
+      // Only trigger heavy AI processing if requested (saves cost)
+      if (trigger_ai) {
+        await eventManager.publishEvent('shipment.location_updated', { shipment_id, lat, lng });
+      } else {
+        console.log(`[TELEMETRY] Skipping AI for ${shipment_id} (Intermediate Point)`);
+      }
 
       // 3. Log telemetry to BigQuery
       await eventManager.logToBigQuery(shipment_id, 'LOCATION_UPDATE', { lat, lng });

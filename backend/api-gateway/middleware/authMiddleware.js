@@ -7,6 +7,15 @@ import { auth } from '../config/firebase.js';
 export const authMiddleware = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
+    const simSecret = req.headers['x-simulator-secret'];
+
+    // --- SYSTEM ACCESS: Allow Simulator Bypass ---
+    // In production, this allows automated telemetry components to talk to the gateway.
+    const CONFIG_SIM_SECRET = process.env.SIMULATOR_SECRET || 'hackathon-2026-secret';
+    if (simSecret === CONFIG_SIM_SECRET) {
+      req.user = { uid: 'system-simulator', role: 'SIMULATOR' };
+      return next();
+    }
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       console.warn(`[AUTH] Unauthorized access attempt to ${req.path} from ${req.ip}`);

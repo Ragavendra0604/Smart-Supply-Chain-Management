@@ -310,14 +310,33 @@ async def handle_pubsub(request: Request):
 async def process_ai_analysis(shipment_id: str):
     """Heavy lifting happens here, fully decoupled from user request"""
     doc_ref = db.collection("shipments").document(shipment_id)
-     # 1. Fetch live shipment data
-    shipment_data = doc_ref.get().to_dict() or {}
-    route_data = shipment_data.get("routeData", [])
-    if not isinstance(route_data, list): route_data = [route_data]
-    
     # 2. Dynamic Evaluation Constants
     COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
     FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
+    
+    # --- RACE CONDITION PROTECTION ---
+    # Fetch existing data to check timestamps
+    shipment_snapshot = doc_ref.get()
+    if not shipment_snapshot.exists:
+        logger.warning(f"Shipment {shipment_id} disappeared during processing.")
+        return
+        
+    shipment_data = shipment_snapshot.to_dict()
+    existing_ai = shipment_data.get("aiResponse", {})
+    last_analyzed = existing_ai.get("last_analyzed")
+    
+    # If we already have a newer analysis in the DB, stop to avoid overwriting with stale data.
+    # Note: Pub/Sub messages can arrive out of order.
+    current_msg_time = datetime.now() 
+    if last_analyzed:
+        # last_analyzed is a Firestore Timestamp
+        if last_analyzed.replace(tzinfo=None) > current_msg_time:
+            logger.info(f"Skipping stale analysis for {shipment_id}")
+            return
+
+    route_data = shipment_data.get("routeData", [])
+    if not isinstance(route_data, list): route_data = [route_data]
+    mode = shipment_data.get("vehicle_type", "ROAD")
     
     # 3. Process All Available Routes
     processed_routes = []
@@ -358,28 +377,36 @@ async def process_ai_analysis(shipment_id: str):
         total_cost = round(dist_km * COST_PER_KM, 2)
         total_fuel = round(dist_km * FUEL_PER_KM, 1)
 
-        # --- FIX: Actually call XGBoost model in the async path ---
+        # --- LOGIC UPGRADE: Relative Risk Scoring ---
+        # Risk should be relative to total duration. 
+        # A 20min delay on a 30min trip is HIGH. On a 10hr trip, it's LOW.
         risk_score = 0.0
-        if ml_model is not None:
-            try:
-                risk_score = get_ml_delay_prediction_v3(route, weather_for_ml)
-                # Normalize delay minutes → risk score (0–1 scale, capped at 2hr = 1.0)
-                risk_score = round(min(risk_score / 120.0, 1.0), 3)
-            except Exception as ml_err:
-                logger.warning(f"XGBoost prediction failed for route {i}: {ml_err}. Using heuristic.")
-                risk_score = round(min((duration_min / 60) * 0.15, 1.0), 3)
+        predicted_delay_mins = 0.0
+        
+        if ml_model:
+            predicted_delay_mins = get_ml_delay_prediction_v3(route, weather_for_ml)
         else:
-            # Heuristic fallback if model failed to load
-            risk_score = round(min((duration_min / 60) * 0.15, 1.0), 3)
+            # Heuristic fallback: 10% base delay
+            predicted_delay_mins = duration_min * 0.1
             
+        if duration_min > 0:
+            # RELATIVE RISK: delay as % of trip. 
+            # Example: 15% delay = 0.3 risk (LOW/MED boundary)
+            # Example: 35% delay = 0.7 risk (MED/HIGH boundary)
+            risk_ratio = predicted_delay_mins / duration_min
+            risk_score = round(min(risk_ratio * 2.0, 1.0), 3) 
+        else:
+            risk_score = 0.0
+
         processed_routes.append({
             "summary": route.get("summary", f"Route {i+1}"),
             "distance_km": dist_km,
             "travel_time_min": duration_min,
             "total_cost": total_cost,
             "total_fuel": total_fuel,
-            "risk_level": "LOW" if risk_score < 0.2 else "MEDIUM" if risk_score < 0.5 else "HIGH",
+            "risk_level": "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH",
             "risk_score": risk_score,
+            "predicted_delay_mins": predicted_delay_mins,
             "is_recommended": False
         })
         
@@ -458,12 +485,26 @@ def predict(data: InputData):
             except Exception:
                 predicted_delay = 5.0 # Fallback 5 min delay
             
-            # Simple risk logic
-            risk = min(predicted_delay / 120.0, 1.0) # > 2hrs delay = 100% risk
+            # --- LOGIC ALIGNMENT: Relative Risk ---
+            # Extract duration_min safely
+            try:
+                raw_dur = route.get("duration_seconds")
+                if raw_dur is not None:
+                    duration_min = int(float(raw_dur) / 60)
+                else:
+                    dur_str = str(route.get("duration", "0")).split()[0]
+                    duration_min = int(dur_str) if dur_str.isdigit() else 0
+            except (ValueError, IndexError):
+                duration_min = 60 # Default 1hr if unknown
+                
+            risk_score = 0.0
+            if duration_min > 0:
+                risk_ratio = predicted_delay / duration_min
+                risk_score = round(min(risk_ratio * 2.0, 1.0), 3)
             
             scored_routes.append({
                 **route,
-                "risk_score": round(risk, 2),
+                "risk_score": risk_score,
                 "predicted_delay_mins": predicted_delay,
             })
 

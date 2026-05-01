@@ -180,9 +180,13 @@ class ApiService {
     }
   }
 
-  Future<void> stopBackendSimulator() async {
+  Future<void> stopBackendSimulator({String? shipmentId}) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/simulator/stop');
-    await _client.post(uri, headers: await _getHeaders());
+    await _client.post(
+      uri,
+      headers: await _getHeaders(),
+      body: shipmentId != null ? jsonEncode({'shipment_id': shipmentId}) : null,
+    );
   }
 
   Future<void> logToServer(String level, String message, [Map<String, dynamic>? data]) async {

@@ -183,10 +183,12 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> stopLiveSimulation() async {
+    final id = simulatingShipmentId;
     isSimulating = false;
+    simulatingShipmentId = null;
     notifyListeners();
     try {
-      await _apiService.stopBackendSimulator();
+      await _apiService.stopBackendSimulator(shipmentId: id);
     } catch (_) {}
   }
 
@@ -194,15 +196,14 @@ class DashboardController extends ChangeNotifier {
     if (!AppConfig.enableSimulationControls) return;
 
     if (isSimulating && simulatingShipmentId == targetShipment.shipmentId) {
-      _simulationTimer?.cancel();
-      isSimulating = false;
-      simulatingShipmentId = null;
-      notifyListeners();
+      await stopLiveSimulation();
       return;
     }
 
     // Stop any existing simulation first
-    _simulationTimer?.cancel();
+    if (isSimulating) {
+      await stopLiveSimulation();
+    }
 
     // If shipment has no route, trigger analysis first then try to start simulation
     if (!targetShipment.hasRoute) {
