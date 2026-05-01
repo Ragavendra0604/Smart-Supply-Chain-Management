@@ -39,11 +39,11 @@ try {
 const sysLog = (service, level, message, data = {}) => {
   const timestamp = new Date().toISOString();
   const entry = JSON.stringify({ timestamp, service, level, message, ...data });
-  
+
   if (gatewayLogStream) {
     gatewayLogStream.write(entry + '\n');
   }
-  
+
   // Standard output is automatically captured by GCP Cloud Logging
   console.log(entry);
 };
@@ -368,13 +368,13 @@ const bootstrap = async () => {
       // Only resume if it hasn't been analyzed recently (likely interrupted)
       const lastUpdate = data.last_analyzed_at?.toDate() || new Date(0);
       const diff = Date.now() - lastUpdate.getTime();
-      
+
       if (diff > 300000) { // 5 minutes of silence
         console.log(`📡 [BOOTSTRAP] Resuming simulation for: ${doc.id}`);
         // We don't have the full original request body, so we use a minimal re-trigger
         // This is a "Best Effort" resume.
         import('./controllers/simulatorController.js').then(m => {
-           m.default.startSimulator({ body: { shipment_id: doc.id, steps: 50, interval_ms: 3000 } }, { json: () => {} });
+          m.default.startSimulator({ body: { shipment_id: doc.id, steps: 50, interval_ms: 3000 } }, { json: () => { } });
         });
       }
     }

@@ -72,9 +72,9 @@ except Exception:
 MODEL_PATH = "delay_model.pkl"
 try:
     ml_model = joblib.load(MODEL_PATH)
-    print(f"Production XGBoost Model loaded from {MODEL_PATH}")
+    logger.info(f"Production XGBoost Model loaded from {MODEL_PATH}")
 except Exception as e:
-    print(f"Warning: Could not load production model: {e}")
+    logger.warning(f"Could not load production model: {e}")
     ml_model = None
 
 def get_ml_delay_prediction_v3(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD") -> float:
@@ -299,7 +299,7 @@ def generate_logistics_insight(prediction: float, data: InputData) -> str:
             """
         
         response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
+            model="gemini-1.5-flash",
             contents=prompt
         )
         return response.text.strip()
@@ -319,9 +319,9 @@ def load_production_model():
         blob.download_to_filename("/tmp/delay_model.pkl")
         
         ml_model = joblib.load("/tmp/delay_model.pkl")
-        print("Production ML Model loaded from GCS")
+        logger.info("Production ML Model loaded from GCS")
     except Exception as e:
-        print(f"MLOps Warning: Could not load model from GCS: {e}. Falling back to defaults.")
+        logger.warning(f"MLOps Warning: Could not load model from GCS: {e}. Falling back to defaults.")
 @app.on_event("startup")
 def startup_event():
     load_production_model()
@@ -393,12 +393,18 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     # Improved Timestamp Comparison
     if last_analyzed and msg_timestamp:
         try:
+            # last_analyzed is likely a google.api_core.datetime_helpers.Datetime (aware UTC)
+            # msg_timestamp is ISO string
             msg_dt = datetime.fromisoformat(msg_timestamp.replace("Z", "+00:00"))
-            if last_analyzed.replace(tzinfo=None) > msg_dt.replace(tzinfo=None):
-                logger.info(f"Skipping stale analysis for {shipment_id}")
-                return
-        except ValueError:
-            pass # Fallback to processing if timestamp is malformed
+            
+            # Convert both to naive UTC for safe comparison if needed, 
+            # but aware comparison is generally safe in Python 3.
+            if hasattr(last_analyzed, 'timestamp'):
+                if last_analyzed.timestamp() > msg_dt.timestamp():
+                    logger.info(f"Skipping stale analysis for {shipment_id}")
+                    return
+        except (ValueError, AttributeError):
+            pass # Fallback to processing if comparison fails
 
     route_data = shipment_data.get("routeData", [])
     if not isinstance(route_data, list): route_data = [route_data]
@@ -496,7 +502,7 @@ def predict(data: InputData):
         return {
             "success": True,
             "risk_score": best["risk_score"],
-            "risk_level": "HIGH" if best["risk_score"] > 0.7 else "MEDIUM" if best["risk_score"] > 0.3 else "LOW",
+            "risk_level": best["risk_level"],
             "delay_prediction": f"{best['predicted_delay_mins']} mins",
             "suggestion": f"Optimal {data.mode} route via '{best.get('summary', 'Main Route')}' selected.",
             "insight": insight,

@@ -51,14 +51,32 @@ const performAnalysis = async (shipment_id) => {
   const rawAiResponse = await aiService.getPrediction(payload);
   const aiResponse = sanitizeAiResponse(rawAiResponse);
 
-  // 4. ATOMIC PERSISTENCE (Store everything for the Dashboard)
-  await db().collection('shipments').doc(shipment_id).update({
-    aiResponse,
-    routeData: logisticsData.routes,
-    weatherData,
-    newsData,
-    last_analyzed_at: new Date(),
-    status: 'ANALYZED'
+  // 4. ATOMIC PERSISTENCE with Stale Update Guard
+  const shipmentRef = db().collection('shipments').doc(shipment_id);
+  await db().runTransaction(async (transaction) => {
+    const freshDoc = await transaction.get(shipmentRef);
+    if (freshDoc.exists) {
+      const freshData = freshDoc.data();
+      const freshAnalyzed = freshData.aiResponse?.last_analyzed?.toDate?.() || new Date(0);
+      if (freshAnalyzed > new Date()) {
+        // This is a rare case where a background analysis finished with a future SERVER_TIMESTAMP
+        // or just after we started.
+        console.log(`[SHIPMENT] Skipping sync update for ${shipment_id} - Fresher background data exists.`);
+        return;
+      }
+    }
+
+    transaction.update(shipmentRef, {
+      aiResponse: {
+        ...aiResponse,
+        last_analyzed: new Date() // Consistency with SERVER_TIMESTAMP type
+      },
+      routeData: logisticsData.routes,
+      weatherData,
+      newsData,
+      status: 'ANALYZED',
+      updated_at: new Date()
+    });
   });
 
   // 5. PRODUCTION FEEDBACK LOOP (Distributed Event & Analytics)
