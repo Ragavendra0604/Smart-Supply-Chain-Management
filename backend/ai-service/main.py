@@ -273,17 +273,43 @@ async def process_ai_analysis(shipment_id: str):
     doc_ref = db.collection("shipments").document(shipment_id)
     
     # 1. Fetch live data & routing
-    # (Simplified for example. In reality, call Maps API or fetch routeData)
+    shipment_data = doc_ref.get().to_dict() or {}
     
-    # 2. Run Predictions using loaded ml_model
-    predicted_delay = 15.5 # Mock result from model
+    # 2. Extract features for ML model
+    # Mocking features based on available data
+    # (In a real app, we'd map route segments and weather to numerical features)
+    input_data = InputData(
+        shipment_id=shipment_id,
+        origin=shipment_data.get("origin", "Unknown"),
+        destination=shipment_data.get("destination", "Unknown"),
+        routeData=shipment_data.get("routeData", []),
+        weatherData=shipment_data.get("weatherData", {})
+    )
     
-    # 3. Write results back to Firestore
+    # 3. Run Predictions
+    # Use mock 15.5 if model not loaded, otherwise use model
+    prediction = 15.5
+    if ml_model:
+        # Simplified: actual model would expect a feature vector
+        # prediction = ml_model.predict(features)[0]
+        pass
+        
+    # 4. Generate Gemini Insight
+    insight = generate_logistics_insight(prediction, input_data)
+    
+    risk_level = "LOW"
+    if prediction > 24: risk_level = "HIGH"
+    elif prediction > 12: risk_level = "MEDIUM"
+
+    # 5. Write results back to Firestore (matching Dart schema)
     doc_ref.update({
         "aiResponse": {
-            "risk_level": "MEDIUM",
-            "delay_prediction": predicted_delay,
-            "insight": "Reroute suggested via alternative corridor due to weather constraints.",
+            "success": True,
+            "risk_score": prediction * 2, # Mock risk score
+            "risk_level": risk_level,
+            "delay_prediction": f"{round(prediction, 1)} hrs",
+            "suggestion": "Optimize route via northern corridor" if risk_level != "LOW" else "Current route optimal",
+            "insight": insight,
             "last_analyzed": firestore.SERVER_TIMESTAMP
         }
     })
