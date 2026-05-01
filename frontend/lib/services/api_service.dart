@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/config/app_config.dart';
@@ -75,10 +76,29 @@ class ApiService {
     );
   }
 
+  /// Streams a shipment, falling back with exponential backoff + jitter
+  /// on repeated failures instead of hammering the backend in a tight loop.
   Stream<Shipment> watchShipment(String shipmentId) async* {
+    var failCount = 0;
+    const maxBackoffMs = 30000; // cap at 30 seconds
+
     while (true) {
-      yield await fetchShipment(shipmentId);
-      await Future<void>.delayed(AppConfig.backendPollInterval);
+      try {
+        final s = await fetchShipment(shipmentId);
+        failCount = 0; // reset on success
+        yield s;
+        await Future<void>.delayed(AppConfig.backendPollInterval);
+      } catch (_) {
+        failCount++;
+        // Exponential backoff: 1s, 2s, 4s, 8s … capped at 30s + random jitter
+        final backoffMs = (1000 * (1 << failCount.clamp(0, 5)))
+            .clamp(0, maxBackoffMs);
+        final jitterMs = (backoffMs * 0.2 *
+            (DateTime.now().millisecondsSinceEpoch % 100) / 100)
+            .toInt();
+        await Future<void>.delayed(
+            Duration(milliseconds: backoffMs + jitterMs));
+      }
     }
   }
 
@@ -124,6 +144,22 @@ class ApiService {
     }
   }
 
+  /// Applies the AI-recommended route for a shipment.
+  /// Writes status = ROUTE_APPLIED to Firestore via the backend.
+  Future<void> applyRoute(String shipmentId) async {
+    final uri = Uri.parse(
+        '${AppConfig.apiBaseUrl}/api/shipments/$shipmentId/apply-route');
+    final response = await _client.patch(
+      uri,
+      headers: await _getHeaders(),
+      body: jsonEncode({'shipment_id': shipmentId}),
+    );
+
+    if (response.statusCode >= 400) {
+      throw Exception('Failed to apply route (${response.statusCode})');
+    }
+  }
+
   Future<void> startBackendSimulator({
     required String shipmentId,
     required String origin,
@@ -162,7 +198,7 @@ class ApiService {
         }),
       );
     } catch (e) {
-      print('Remote logging failed: $e');
+      debugPrint('Remote logging failed: $e');
     }
   }
 }

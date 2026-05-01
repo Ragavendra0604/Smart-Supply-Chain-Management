@@ -68,8 +68,8 @@ app.use(rateLimiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-/* --- FRONTEND LOGGING BRIDGE --- */
-app.post('/api/logs', (req, res) => {
+/* --- FRONTEND LOGGING BRIDGE (PROTECTED) --- */
+app.post('/api/logs', authMiddleware, (req, res) => {
   const { level, message, data } = req.body;
   sysLog('FRONTEND', level || 'INFO', message, data);
   res.status(204).send();
@@ -131,7 +131,15 @@ app.get('/api/shipments', rateLimiter, authMiddleware, async (req, res) => {
 /* ---------------- GET LOGISTICS STATS (PROTECTED) ---------------- */
 app.get('/api/stats', rateLimiter, authMiddleware, async (req, res) => {
   try {
-    const snapshot = await db().collection('shipments').get();
+    // FIX: Capped at 500 — prevents OOM on unbounded full-collection scan.
+    // For true aggregation at scale, move to a Firestore counter document
+    // or a scheduled Cloud Function that pre-computes these stats.
+    const STATS_SCAN_LIMIT = parseInt(process.env.STATS_SCAN_LIMIT || '500');
+    const snapshot = await db()
+      .collection('shipments')
+      .orderBy('created_at', 'desc')
+      .limit(STATS_SCAN_LIMIT)
+      .get();
 
     let total = snapshot.size;
     let highRiskCount = 0;
@@ -168,7 +176,9 @@ app.get('/api/stats', rateLimiter, authMiddleware, async (req, res) => {
           low: lowRiskCount
         },
         avgDelay: analyzedCount > 0 ? Math.round(totalDelay / analyzedCount) : 0,
-        efficiencyRate: analyzedCount > 0 ? Math.round(((total - highRiskCount) / total) * 100) : 100
+        efficiencyRate: total > 0 ? Math.round(((total - highRiskCount) / total) * 100) : 100,
+        scannedCount: total,
+        cappedAt: STATS_SCAN_LIMIT
       }
     });
   } catch (err) {
@@ -273,13 +283,50 @@ app.post('/update-location', authMiddleware, async (req, res) => {
   }
 });
 
-/* ---------------- TEST FIRESTORE ---------------- */
-app.get('/test-db', async (req, res) => {
+/* NOTE: /test-db removed — unauthenticated Firestore writes are a security risk.
+   Use GET /health for connectivity checks instead. */
+
+/* ---------------- APPLY OPTIMIZED ROUTE (PROTECTED) ---------------- */
+// Called by the Flutter "Apply Optimized Route" button.
+// Writes status = ROUTE_APPLIED and timestamps the action in Firestore.
+app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, async (req, res) => {
   try {
-    await db().collection('test').doc('demo').set({ working: true });
-    res.send('Firestore working');
+    const validation = validateShipmentLookup(req.params.shipment_id);
+    if (!validation.valid) {
+      return res.status(400).json({ success: false, errors: validation.errors });
+    }
+
+    const { shipment_id } = validation.value;
+    const shipmentRef = db().collection('shipments').doc(shipment_id);
+    const doc = await shipmentRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ success: false, error: 'Shipment not found' });
+    }
+
+    await shipmentRef.update({
+      status: 'ROUTE_APPLIED',
+      route_applied_at: new Date(),
+      updated_at: new Date()
+    });
+
+    // Publish event for downstream consumers (e.g. vehicle notification service)
+    await eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch((err) => {
+      // Don't fail the request if event publish fails — just log it
+      console.error('[APPLY-ROUTE] Event publish failed (non-fatal):', err.message);
+    });
+
+    sysLog('GATEWAY', 'INFO', `Route applied for ${shipment_id}`);
+
+    res.json({
+      success: true,
+      message: `Optimized route applied for ${shipment_id}`,
+      shipment_id,
+      status: 'ROUTE_APPLIED'
+    });
   } catch (err) {
-    res.status(500).send(err.message);
+    sysLog('GATEWAY', 'ERROR', 'Apply route failed', { error: err.message });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

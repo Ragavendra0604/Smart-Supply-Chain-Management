@@ -27,7 +27,7 @@ export const corsOptions = {
       callback(null, false);
     }
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-idempotency-key'],
   maxAge: 600
 };

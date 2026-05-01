@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../controllers/dashboard_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/shipment.dart';
 import '../../widgets/info_card.dart';
@@ -45,7 +47,7 @@ class OptimizationScreen extends StatelessWidget {
             const SizedBox(height: 24),
             if (shipment.news.isNotEmpty) _NewsSection(news: shipment.news),
             const SizedBox(height: 24),
-            _ActionButtons(),
+            _ActionButtons(shipment: shipment),
           ],
         ),
       ),
@@ -655,36 +657,97 @@ class _NewsSection extends StatelessWidget {
   }
 }
 
-class _ActionButtons extends StatelessWidget {
+class _ActionButtons extends StatefulWidget {
+  final Shipment shipment;
+  const _ActionButtons({required this.shipment});
+
+  @override
+  State<_ActionButtons> createState() => _ActionButtonsState();
+}
+
+class _ActionButtonsState extends State<_ActionButtons> {
+  bool _isApplying = false;
+
+  Future<void> _handleApply(DashboardController controller) async {
+    if (_isApplying) return;
+    setState(() => _isApplying = true);
+
+    try {
+      await controller.applyOptimizedRoute(widget.shipment.shipmentId);
+
+      if (!mounted) return;
+      final success = controller.successMessage != null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? '✅ ${controller.successMessage}'
+                : '❌ ${controller.errorMessage ?? 'Unknown error'}',
+          ),
+          backgroundColor: success ? AppTheme.success : AppTheme.danger,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isApplying = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 58,
-      child: ElevatedButton.icon(
-        onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ Optimized route dispatched to vehicle'),
-              backgroundColor: AppTheme.success,
-              behavior: SnackBarBehavior.floating,
+    final controller = context.watch<DashboardController>();
+    final hasAnalysis = widget.shipment.hasAnalysis;
+
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 58,
+          child: ElevatedButton.icon(
+            onPressed: (hasAnalysis && !_isApplying)
+                ? () => _handleApply(controller)
+                : null,
+            icon: _isApplying
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.send_rounded),
+            label: Text(
+              _isApplying ? 'APPLYING ROUTE...' : 'APPLY OPTIMIZED ROUTE',
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w900),
             ),
-          );
-        },
-        icon: const Icon(Icons.send_rounded),
-        label: const Text(
-          'APPLY OPTIMIZED ROUTE',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.primary,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.4),
+              disabledForegroundColor: Colors.white70,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 0,
+            ),
           ),
-          elevation: 0,
         ),
-      ),
+        if (!hasAnalysis) ...[  
+          const SizedBox(height: 8),
+          const Text(
+            'Run AI Analysis first to enable route application.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

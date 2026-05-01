@@ -24,12 +24,20 @@ db = firestore.Client()
 ml_model = None
 
 # Enable CORS for frontend/backend communication
+# Lock CORS to the API gateway origin only.
+# Set ALLOWED_ORIGINS env var as comma-separated list for production.
+_raw_origins = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5000,http://localhost:3000,http://localhost:8080,https://ssm-sb.web.app,https://ssm-sb.firebaseapp.com"
+)
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["POST", "GET"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # --- CENTRALIZED LOGGING UTILITY ---
@@ -123,12 +131,15 @@ def get_ml_delay_prediction_v3(route: Dict[str, Any], weather: Dict[str, Any]) -
 
 # -------- INPUT MODEL --------
 class InputData(BaseModel):
+    shipment_id: Optional[str] = None   # FIX: was silently ignored (not declared)
+    origin: Optional[str] = None
+    destination: Optional[str] = None
     routeData: Optional[Any] = None
     weatherData: Optional[Any] = None
     newsData: Optional[Any] = None
     currentLocation: Optional[Any] = None
     source: Optional[str] = None
-    mode: Optional[str] = "ROAD" # NEW: Multi-modal support
+    mode: Optional[str] = "ROAD"  # Multi-modal support
 
 # -------- GENERATIVE AI INSIGHTS --------
 def generate_logistics_insight(prediction: float, data: InputData) -> str:
@@ -261,30 +272,40 @@ async def handle_pubsub(request: Request):
     try:
         envelope = await request.json()
         if not envelope or "message" not in envelope:
-            raise HTTPException(status_code=400, detail="Invalid Pub/Sub envelope")
-            
+            # Malformed envelope — ack to avoid poison-pill retry loops
+            logger.error("Invalid Pub/Sub envelope received — acknowledging to prevent retry storm")
+            return JSONResponse(status_code=200, content={"status": "invalid_envelope"})
+
         pubsub_message = envelope["message"]
         if "data" in pubsub_message:
             decoded_data = base64.b64decode(pubsub_message["data"]).decode("utf-8")
+            # FIX: Removed ast.literal_eval — it is a code injection risk.
+            # If the payload is not valid JSON, it should fail loudly.
             try:
                 payload = json.loads(decoded_data)
-            except json.JSONDecodeError:
-                import ast
-                payload = ast.literal_eval(decoded_data)
-            
+            except json.JSONDecodeError as decode_err:
+                logger.error(f"Pub/Sub message is not valid JSON: {decode_err}. Raw: {decoded_data[:200]}")
+                # Ack malformed message to avoid infinite retry
+                return JSONResponse(status_code=200, content={"status": "malformed_payload"})
+
             event_type = payload.get("eventType")
             data = payload.get("data", {})
-            
+
             if event_type == "shipment.location_updated":
                 shipment_id = data.get("shipment_id")
+                if not shipment_id:
+                    logger.error("Missing shipment_id in Pub/Sub event data")
+                    return JSONResponse(status_code=200, content={"status": "missing_shipment_id"})
                 await process_ai_analysis(shipment_id)
-                
-        return {"status": "success"} # Ack the message
+
+        return JSONResponse(status_code=200, content={"status": "success"})
+
     except Exception as e:
         error_msg = f"Pub/Sub Processing Error: {traceback.format_exc()}"
         logger.error(error_msg)
-        # Returning 200 acknowledges the message and stops the retry loop.
-        return {"status": "error", "message": str(e)}
+        # FIX: Return HTTP 500 so Cloud Pub/Sub retries delivery.
+        # Previously this returned 200 which silently dropped failed messages.
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 async def process_ai_analysis(shipment_id: str):
     """Heavy lifting happens here, fully decoupled from user request"""
@@ -302,28 +323,54 @@ async def process_ai_analysis(shipment_id: str):
     processed_routes = []
     best_route_index = 0
     min_score = float('inf')
-    
+
+    # Fetch weather for ML features (use cached value from shipment doc)
+    weather_for_ml = shipment_data.get("weatherData", {})
+
     for i, route in enumerate(route_data):
-        # Extract metrics safely
-        dist_str = route.get("distance", "0 km").split()[0].replace(",", "")
-        dist_km = float(dist_str) if dist_str.replace(".", "").isdigit() else 0.0
-        
-        duration_str = route.get("duration", "0 mins").split()[0]
-        duration_min = int(duration_str) if duration_str.isdigit() else 0
-        
+        # --- FIX: Robust distance parsing ---
+        # Handles: "350 km", "1,234.5 km", "217 miles", numeric values
+        dist_km = 0.0
+        try:
+            raw_dist = route.get("distance_meters")
+            if raw_dist is not None:
+                dist_km = float(raw_dist) / 1000.0
+            else:
+                dist_str = str(route.get("distance", "0")).split()[0].replace(",", "")
+                dist_km = float(dist_str) if dist_str else 0.0
+        except (ValueError, IndexError):
+            dist_km = 0.0
+
+        # --- FIX: Robust duration parsing ---
+        # Prefer raw seconds (always available from Maps API)
+        duration_min = 0
+        try:
+            raw_dur = route.get("duration_seconds")
+            if raw_dur is not None:
+                duration_min = int(float(raw_dur) / 60)
+            else:
+                dur_str = str(route.get("duration", "0")).split()[0]
+                duration_min = int(dur_str) if dur_str.isdigit() else 0
+        except (ValueError, IndexError):
+            duration_min = 0
+
         # Calculate Costs
         total_cost = round(dist_km * COST_PER_KM, 2)
         total_fuel = round(dist_km * FUEL_PER_KM, 1)
-        
-        # Use ML Model for Risk Score (or fallback to heuristic if loading)
+
+        # --- FIX: Actually call XGBoost model in the async path ---
         risk_score = 0.0
-        if ml_model:
-            # Generate features dynamically from route + weather
-            # risk_score = ml_model.predict(features)[0]
-            pass
+        if ml_model is not None:
+            try:
+                risk_score = get_ml_delay_prediction_v3(route, weather_for_ml)
+                # Normalize delay minutes → risk score (0–1 scale, capped at 2hr = 1.0)
+                risk_score = round(min(risk_score / 120.0, 1.0), 3)
+            except Exception as ml_err:
+                logger.warning(f"XGBoost prediction failed for route {i}: {ml_err}. Using heuristic.")
+                risk_score = round(min((duration_min / 60) * 0.15, 1.0), 3)
         else:
-            # Heuristic: duration/traffic impact
-            risk_score = round((duration_min / 60) * 0.15, 3)
+            # Heuristic fallback if model failed to load
+            risk_score = round(min((duration_min / 60) * 0.15, 1.0), 3)
             
         processed_routes.append({
             "summary": route.get("summary", f"Route {i+1}"),

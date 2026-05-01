@@ -140,6 +140,25 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  /// Applies the AI-recommended optimized route for the given shipment.
+  /// Calls the backend PATCH endpoint, then surfaces outcome to the UI.
+  Future<void> applyOptimizedRoute(String shipmentId) async {
+    errorMessage = null;
+    successMessage = null;
+    notifyListeners();
+
+    try {
+      await _apiService.applyRoute(shipmentId);
+      successMessage = 'Optimized route applied for $shipmentId — vehicle notified.';
+      _apiService.logToServer('INFO', 'Optimized route applied', {'shipmentId': shipmentId});
+    } catch (e) {
+      errorMessage = 'Failed to apply route. Please try again.';
+      _apiService.logToServer('ERROR', 'Apply route failed', {'shipmentId': shipmentId, 'error': e.toString()});
+    } finally {
+      notifyListeners();
+    }
+  }
+
   Future<void> startLiveSimulation(Shipment shipment) async {
     isSimulating = true;
     notifyListeners();
