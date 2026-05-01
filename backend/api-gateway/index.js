@@ -393,7 +393,7 @@ const bootstrap = async () => {
 const startApp = async () => {
   try {
     // In production, these names match GCP Secret Manager keys
-    await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'GOOGLE_MAPS_API_KEY', 'WEATHER_API_KEY', 'NEWS_API_KEY']);
+    await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'GOOGLE_MAPS_API_KEY', 'WEATHER_API_KEY', 'NEWS_API_KEY', 'SIMULATOR_SECRET']);
 
     // Initialize Firebase after secrets are loaded
     try {
