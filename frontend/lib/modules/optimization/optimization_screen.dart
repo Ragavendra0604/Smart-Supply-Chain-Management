@@ -145,7 +145,7 @@ class _RiskBanner extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   message,
-                  style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 12),
+                  style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -157,7 +157,7 @@ class _RiskBanner extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
-              '+$delay',
+              level == 'LOW' ? '+0 mins' : '+$delay',
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.w900,
@@ -534,23 +534,23 @@ class _AiReasoning extends StatelessWidget {
           if (suggestion.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.primary.withValues(alpha: 0.08),
+                color: const Color(0xFFDDE7F5), // Light blue from image
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.lightbulb_outline,
-                      color: AppTheme.primary, size: 16),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.check_box_outlined,
+                      color: AppTheme.success, size: 20),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       suggestion,
                       style: const TextStyle(
-                        color: AppTheme.primary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A3B70), // Darker blue for contrast
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
                         height: 1.4,
                       ),
                     ),

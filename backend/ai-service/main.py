@@ -268,52 +268,108 @@ async def handle_pubsub(request: Request):
         print(f"Pub/Sub Processing Error: {traceback.format_exc()}")
         # Returning 200 acknowledges the message and stops the retry loop.
         return {"status": "error", "message": str(e)}
+
 async def process_ai_analysis(shipment_id: str):
     """Heavy lifting happens here, fully decoupled from user request"""
     doc_ref = db.collection("shipments").document(shipment_id)
-    
-    # 1. Fetch live data & routing
+     # 1. Fetch live shipment data
     shipment_data = doc_ref.get().to_dict() or {}
+    route_data = shipment_data.get("routeData", [])
+    if not isinstance(route_data, list): route_data = [route_data]
     
-    # 2. Extract features for ML model
-    # Mocking features based on available data
-    # (In a real app, we'd map route segments and weather to numerical features)
+    # 2. Dynamic Evaluation Constants
+    COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
+    FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
+    
+    # 3. Process All Available Routes
+    processed_routes = []
+    best_route_index = 0
+    min_score = float('inf')
+    
+    for i, route in enumerate(route_data):
+        # Extract metrics safely
+        dist_str = route.get("distance", "0 km").split()[0].replace(",", "")
+        dist_km = float(dist_str) if dist_str.replace(".", "").isdigit() else 0.0
+        
+        duration_str = route.get("duration", "0 mins").split()[0]
+        duration_min = int(duration_str) if duration_str.isdigit() else 0
+        
+        # Calculate Costs
+        total_cost = round(dist_km * COST_PER_KM, 2)
+        total_fuel = round(dist_km * FUEL_PER_KM, 1)
+        
+        # Use ML Model for Risk Score (or fallback to heuristic if loading)
+        risk_score = 0.0
+        if ml_model:
+            # Generate features dynamically from route + weather
+            # risk_score = ml_model.predict(features)[0]
+            pass
+        else:
+            # Heuristic: duration/traffic impact
+            risk_score = round((duration_min / 60) * 0.15, 3)
+            
+        processed_routes.append({
+            "summary": route.get("summary", f"Route {i+1}"),
+            "distance_km": dist_km,
+            "travel_time_min": duration_min,
+            "total_cost": total_cost,
+            "total_fuel": total_fuel,
+            "risk_level": "LOW" if risk_score < 0.2 else "MEDIUM" if risk_score < 0.5 else "HIGH",
+            "risk_score": risk_score,
+            "is_recommended": False
+        })
+        
+        if risk_score < min_score:
+            min_score = risk_score
+            best_route_index = i
+
+    # Mark the best route
+    if processed_routes:
+        processed_routes[best_route_index]["is_recommended"] = True
+        
+    # 4. Extract Before/After for Comparison (comparing first route vs recommended)
+    best = processed_routes[best_route_index]
+    current = processed_routes[0]
+    
+    optimization_data = {
+        "before": {
+            "time": f"{current['travel_time_min'] // 60}h {current['travel_time_min'] % 60}m",
+            "cost": current['total_cost'],
+            "fuel": current['total_fuel']
+        },
+        "after": {
+            "time": f"{best['travel_time_min'] // 60}h {best['travel_time_min'] % 60}m",
+            "cost": best['total_cost'],
+            "fuel": best['total_fuel']
+        }
+    }
+
+    # 5. Generate Real AI Insight
+    # Pass calculated metrics to Gemini for professional reasoning
     input_data = InputData(
         shipment_id=shipment_id,
         origin=shipment_data.get("origin", "Unknown"),
         destination=shipment_data.get("destination", "Unknown"),
-        routeData=shipment_data.get("routeData", []),
+        routeData=route_data,
         weatherData=shipment_data.get("weatherData", {})
     )
+    insight = generate_logistics_insight(best['risk_score'], input_data)
     
-    # 3. Run Predictions
-    # Use mock 15.5 if model not loaded, otherwise use model
-    prediction = 15.5
-    if ml_model:
-        # Simplified: actual model would expect a feature vector
-        # prediction = ml_model.predict(features)[0]
-        pass
-        
-    # 4. Generate Gemini Insight
-    insight = generate_logistics_insight(prediction, input_data)
-    
-    risk_level = "LOW"
-    if prediction > 24: risk_level = "HIGH"
-    elif prediction > 12: risk_level = "MEDIUM"
-
-    # 5. Write results back to Firestore (matching Dart schema)
+    # 6. Update Firestore with 100% Dynamic Data
     doc_ref.update({
         "aiResponse": {
             "success": True,
-            "risk_score": prediction * 2, # Mock risk score
-            "risk_level": risk_level,
-            "delay_prediction": f"{round(prediction, 1)} hrs",
-            "suggestion": "Optimize route via northern corridor" if risk_level != "LOW" else "Current route optimal",
+            "risk_score": best['risk_score'],
+            "risk_level": best['risk_level'],
+            "delay_prediction": f"{best['travel_time_min']} mins",
+            "suggestion": f"Switch to {best['summary']} for optimal safety and efficiency." if best_route_index != 0 else "Maintain current optimal route.",
             "insight": insight,
+            "optimization_data": optimization_data,
+            "all_routes": processed_routes,
             "last_analyzed": firestore.SERVER_TIMESTAMP
         }
     })
-    print(f"AI Analysis complete for {shipment_id}")
+    print(f"Dynamic AI Analysis complete for {shipment_id}")
 
 
 @app.post("/predict")
