@@ -77,3 +77,16 @@ export const validateLocationUpdate = (body = {}) => {
     }
   };
 };
+
+export const sanitizeAiResponse = (raw = {}) => {
+  return {
+    success: raw.success === true,
+    risk_score: Number(raw.risk_score) || 0,
+    risk_level: isNonEmptyString(raw.risk_level) ? raw.risk_level.toUpperCase() : 'LOW',
+    delay_prediction: isNonEmptyString(raw.delay_prediction) ? raw.delay_prediction : '0 mins',
+    suggestion: isNonEmptyString(raw.suggestion) ? raw.suggestion : 'Proceed normally',
+    insight: isNonEmptyString(raw.insight) ? raw.insight : '',
+    optimization_data: raw.optimization_data || null,
+    all_routes: Array.isArray(raw.all_routes) ? raw.all_routes : []
+  };
+};

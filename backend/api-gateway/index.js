@@ -129,12 +129,18 @@ app.get('/api/shipments', rateLimiter, authMiddleware, async (req, res) => {
 });
 
 /* ---------------- GET LOGISTICS STATS (PROTECTED) ---------------- */
-app.get('/api/stats', rateLimiter, authMiddleware, async (req, res) => {
+const STATS_SCAN_LIMIT = 500;
+let statsCache = null;
+let lastStatsFetch = 0;
+const STATS_CACHE_TTL = 60 * 1000; // 1 minute
+
+app.get('/api/stats', authMiddleware, async (req, res) => {
   try {
-    // FIX: Capped at 500 — prevents OOM on unbounded full-collection scan.
-    // For true aggregation at scale, move to a Firestore counter document
-    // or a scheduled Cloud Function that pre-computes these stats.
-    const STATS_SCAN_LIMIT = parseInt(process.env.STATS_SCAN_LIMIT || '500');
+    const now = Date.now();
+    if (statsCache && (now - lastStatsFetch < STATS_CACHE_TTL)) {
+      return res.json({ success: true, stats: statsCache, source: 'cache' });
+    }
+
     const snapshot = await db()
       .collection('shipments')
       .orderBy('created_at', 'desc')
@@ -165,21 +171,26 @@ app.get('/api/stats', rateLimiter, authMiddleware, async (req, res) => {
       }
     });
 
+    statsCache = {
+      totalShipments: total,
+      atRisk: highRiskCount,
+      riskDistribution: {
+        high: highRiskCount,
+        medium: mediumRiskCount,
+        low: lowRiskCount
+      },
+      avgDelay: analyzedCount > 0 ? Math.round(totalDelay / analyzedCount) : 0,
+      efficiencyRate: total > 0 ? Math.round(((total - highRiskCount) / total) * 100) : 100,
+      scannedCount: total,
+      cappedAt: STATS_SCAN_LIMIT,
+      note: total >= STATS_SCAN_LIMIT ? "Stats are partial (scan limit reached). Use BigQuery for full analytics." : ""
+    };
+    lastStatsFetch = now;
+
     res.json({
       success: true,
-      stats: {
-        totalShipments: total,
-        atRisk: highRiskCount,
-        riskDistribution: {
-          high: highRiskCount,
-          medium: mediumRiskCount,
-          low: lowRiskCount
-        },
-        avgDelay: analyzedCount > 0 ? Math.round(totalDelay / analyzedCount) : 0,
-        efficiencyRate: total > 0 ? Math.round(((total - highRiskCount) / total) * 100) : 100,
-        scannedCount: total,
-        cappedAt: STATS_SCAN_LIMIT
-      }
+      stats: statsCache,
+      source: 'live'
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -343,8 +354,37 @@ app.post('/api/simulator/stop', simulatorController.stopSimulator);
 
 const PORT = process.env.PORT || 5000;
 
-// Bootstrap Application: Load Secrets then Start Server
+// --- BOOTSTRAP: Persistence Guard (Resume active simulations) ---
 const bootstrap = async () => {
+  try {
+    console.log('🔄 [BOOTSTRAP] Checking for interrupted simulations...');
+    const snapshot = await db().collection('shipments')
+      .where('status', '==', 'IN_TRANSIT')
+      .limit(10) // Limit to avoid burst on start
+      .get();
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      // Only resume if it hasn't been analyzed recently (likely interrupted)
+      const lastUpdate = data.last_analyzed_at?.toDate() || new Date(0);
+      const diff = Date.now() - lastUpdate.getTime();
+      
+      if (diff > 300000) { // 5 minutes of silence
+        console.log(`📡 [BOOTSTRAP] Resuming simulation for: ${doc.id}`);
+        // We don't have the full original request body, so we use a minimal re-trigger
+        // This is a "Best Effort" resume.
+        import('./controllers/simulatorController.js').then(m => {
+           m.default.startSimulator({ body: { shipment_id: doc.id, steps: 50, interval_ms: 3000 } }, { json: () => {} });
+        });
+      }
+    }
+  } catch (err) {
+    console.error('❌ [BOOTSTRAP ERROR]:', err.message);
+  }
+};
+
+// Bootstrap Application: Load Secrets then Start Server
+const startApp = async () => {
   try {
     // In production, these names match GCP Secret Manager keys
     await loadSecrets(['FIREBASE_SERVICE_ACCOUNT', 'GOOGLE_MAPS_API_KEY', 'WEATHER_API_KEY', 'NEWS_API_KEY']);
@@ -358,8 +398,9 @@ const bootstrap = async () => {
       throw firebaseError;
     }
 
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Production Gateway running on port ${PORT}`);
+    app.listen(PORT, async () => {
+      console.log(`🚀 API Gateway running on port ${PORT}`);
+      await bootstrap();
     });
   } catch (err) {
     console.error('CRITICAL: Failed to bootstrap application:', err);
@@ -367,7 +408,7 @@ const bootstrap = async () => {
   }
 };
 
-bootstrap();
+startApp();
 
 /* Mounted LAST: POST /api/shipments/analyze - keeps inline GET routes unblocked */
 app.use('/api/shipments', shipmentRoutes);

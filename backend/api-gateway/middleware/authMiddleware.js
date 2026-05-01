@@ -11,8 +11,11 @@ export const authMiddleware = async (req, res, next) => {
 
     // --- SYSTEM ACCESS: Allow Simulator Bypass ---
     // In production, this allows automated telemetry components to talk to the gateway.
-    const CONFIG_SIM_SECRET = process.env.SIMULATOR_SECRET || 'hackathon-2026-secret';
-    if (simSecret === CONFIG_SIM_SECRET) {
+    const CONFIG_SIM_SECRET = process.env.SIMULATOR_SECRET;
+    if (!CONFIG_SIM_SECRET) {
+      console.error('CRITICAL: SIMULATOR_SECRET environment variable is not defined.');
+    }
+    if (CONFIG_SIM_SECRET && simSecret === CONFIG_SIM_SECRET) {
       req.user = { uid: 'system-simulator', role: 'SIMULATOR' };
       return next();
     }

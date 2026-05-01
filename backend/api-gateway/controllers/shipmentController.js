@@ -6,6 +6,7 @@ import aiService from '../services/aiService.js';
 import airService from '../services/airService.js';
 import seaService from '../services/seaService.js';
 import { eventManager } from '../services/eventService.js';
+import { sanitizeAiResponse } from '../utils/validation.js';
 
 /**
  * PRODUCTION LOGISTICS ENGINE: Multi-Modal & Distributed
@@ -22,10 +23,10 @@ const performAnalysis = async (shipment_id) => {
   // 1. DYNAMIC MULTI-MODAL DATA FETCHING
   if (mode === 'AIR') {
     const flight = await airService.getFlightStatus(shipment.carrier_id || 'AI101');
-    logisticsData.routes = [{ summary: 'Flight Path', duration_seconds: 3600 * 4, distance_meters: 2000000 }];
+    logisticsData.routes = [{ summary: 'Flight Path', duration_seconds: 3600 * 4, distance_meters: 2000000, mode: 'AIR' }];
   } else if (mode === 'SEA') {
     const vessel = await seaService.getVesselStatus(shipment.carrier_id || 'SE101');
-    logisticsData.routes = [{ summary: 'Ocean Lane', duration_seconds: 86400 * 5, distance_meters: 5000000 }];
+    logisticsData.routes = [{ summary: 'Ocean Lane', duration_seconds: 86400 * 5, distance_meters: 5000000, mode: 'SEA' }];
   } else {
     // Default ROAD
     logisticsData.routes = await mapsService.getRoute(shipment.origin, shipment.destination).catch(() => []);
@@ -47,7 +48,8 @@ const performAnalysis = async (shipment_id) => {
     currentLocation: shipment.current_location || null
   };
 
-  const aiResponse = await aiService.getPrediction(payload);
+  const rawAiResponse = await aiService.getPrediction(payload);
+  const aiResponse = sanitizeAiResponse(rawAiResponse);
 
   // 4. ATOMIC PERSISTENCE (Store everything for the Dashboard)
   await db().collection('shipments').doc(shipment_id).update({

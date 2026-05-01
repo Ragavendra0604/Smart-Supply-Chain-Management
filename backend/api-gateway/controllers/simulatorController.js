@@ -8,8 +8,11 @@ import mapsService from '../services/mapsService.js';
 const activeSimulations = new Map();
 
 const getSimHeaders = (idempotencyKey = null) => {
+  if (!process.env.SIMULATOR_SECRET) {
+    console.error('CRITICAL: SIMULATOR_SECRET not configured in environment.');
+  }
   const headers = {
-    'x-simulator-secret': process.env.SIMULATOR_SECRET || 'hackathon-2026-secret',
+    'x-simulator-secret': process.env.SIMULATOR_SECRET,
     'Content-Type': 'application/json'
   };
   if (idempotencyKey) headers['x-idempotency-key'] = idempotencyKey;
@@ -84,6 +87,10 @@ const runSimulationStep = async (shipmentId) => {
   // Destination reached
   if (state.index >= state.path.length) {
     console.log(`🏁 [SIMULATOR] ${shipmentId} arrived.`);
+    db().collection('shipments').doc(shipmentId).update({ 
+      status: 'COMPLETED',
+      updated_at: new Date()
+    }).catch(e => console.error("Completion update failed", e.message));
     stopSimulationLogic(shipmentId);
     return;
   }
@@ -96,11 +103,22 @@ const runSimulationStep = async (shipmentId) => {
   try {
     const idempotencyKey = `sim-${shipmentId}-${state.index}`;
 
-    // Sync with Firestore for Dynamic Path Switching / Risk Alerts
-    const doc = await db().collection('shipments').doc(shipmentId).get();
-    const currentData = doc.data() || {};
+    // A. SYNC WITH FIRESTORE (Throttle reads to every 3 steps or first step)
+    let currentData = state.lastKnownData || {};
+    if (state.index % 3 === 0 || state.index === 0) {
+      const doc = await db().collection('shipments').doc(shipmentId).get();
+      currentData = doc.data() || {};
+      state.lastKnownData = currentData;
+      
+      // B. TERMINATION CHECK (If status changed externally)
+      if (['COMPLETED', 'STOPPED', 'CANCELLED'].includes(currentData.status)) {
+        console.log(`🛑 [SIMULATOR] Terminated via external status change: ${shipmentId}`);
+        stopSimulationLogic(shipmentId);
+        return;
+      }
+    }
 
-    // A. RISK-AWARE TRIGGERING (Overwrites cost-saving if high risk)
+    // C. RISK-AWARE TRIGGERING (Overwrites cost-saving if high risk)
     const isHighRisk = currentData.aiResponse?.risk_level === 'HIGH';
     const isCheckpoint = (state.index % state.checkpointStep === 0) || (state.index === state.path.length - 1) || isHighRisk;
 
@@ -167,6 +185,13 @@ const stopSimulationLogic = (shipmentId) => {
     state.isActive = false;
     if (state.timeoutId) clearTimeout(state.timeoutId);
     activeSimulations.delete(shipmentId);
+    
+    // Explicitly set STOPPED status so AI Service drops background tasks
+    db().collection('shipments').doc(shipmentId).update({
+      status: 'STOPPED',
+      updated_at: new Date()
+    }).catch(e => console.error("Stop status update failed", e.message));
+
     console.log(`🛑 [SIMULATOR] Terminated: ${shipmentId}`);
     return true;
   }
