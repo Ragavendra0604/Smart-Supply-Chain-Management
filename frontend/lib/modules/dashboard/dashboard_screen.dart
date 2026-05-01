@@ -4,6 +4,7 @@ import '../../controllers/dashboard_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/shipment.dart';
 import '../../widgets/metric_chip.dart';
+import '../../widgets/add_shipment_dialog.dart';
 import '../optimization/optimization_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -77,6 +78,18 @@ class DashboardScreen extends StatelessWidget {
             ),
           );
         },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (context) => const AddShipmentDialog(),
+          );
+        },
+        icon: const Icon(Icons.add),
+        label: const Text('New Shipment'),
+        backgroundColor: AppTheme.primary,
+        foregroundColor: Colors.white,
       ),
     );
   }

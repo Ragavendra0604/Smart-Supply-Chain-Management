@@ -144,6 +144,27 @@ class ApiService {
     }
   }
 
+  Future<void> createShipment({
+    required String shipmentId,
+    required String origin,
+    required String destination,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/create-shipment');
+    final response = await _client.post(
+      uri,
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'shipment_id': shipmentId,
+        'origin': origin,
+        'destination': destination,
+      }),
+    );
+
+    if (response.statusCode >= 400) {
+      throw Exception('Failed to create shipment');
+    }
+  }
+
   /// Applies the AI-recommended route for a shipment.
   /// Writes status = ROUTE_APPLIED to Firestore via the backend.
   Future<void> applyRoute(String shipmentId) async {

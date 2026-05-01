@@ -57,15 +57,18 @@ class DashboardController extends ChangeNotifier {
       ]);
       if (activeShipmentId != null) {
         _bindShipment(activeShipmentId!);
-        _apiService.logToServer('INFO', 'Dashboard bootstrapped', {'activeShipment': activeShipmentId});
+        _apiService.logToServer('INFO', 'Dashboard bootstrapped',
+            {'activeShipment': activeShipmentId});
       } else {
         errorMessage =
             'No shipments found. Create or analyze a shipment first.';
-        _apiService.logToServer('WARNING', 'No shipments found during bootstrap');
+        _apiService.logToServer(
+            'WARNING', 'No shipments found during bootstrap');
       }
     } catch (error) {
       errorMessage = 'Unable to load dashboard data.';
-      _apiService.logToServer('ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
+      _apiService.logToServer(
+          'ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
     } finally {
       isBootstrapping = false;
       notifyListeners();
@@ -130,12 +133,44 @@ class DashboardController extends ChangeNotifier {
 
     try {
       await _aiService.refreshPrediction(shipmentId);
-      _apiService.logToServer('INFO', 'AI analysis refreshed', {'shipmentId': shipmentId});
+      _apiService.logToServer(
+          'INFO', 'AI analysis refreshed', {'shipmentId': shipmentId});
     } catch (e) {
       errorMessage = 'AI refresh failed. Please try again.';
-      _apiService.logToServer('ERROR', 'AI refresh failed', {'shipmentId': shipmentId, 'error': e.toString()});
+      _apiService.logToServer('ERROR', 'AI refresh failed',
+          {'shipmentId': shipmentId, 'error': e.toString()});
     } finally {
       isRefreshingAi = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> createShipment({
+    required String shipmentId,
+    required String origin,
+    required String destination,
+  }) async {
+    errorMessage = null;
+    successMessage = null;
+    notifyListeners();
+
+    try {
+      await _apiService.createShipment(
+        shipmentId: shipmentId,
+        origin: origin,
+        destination: destination,
+      );
+      successMessage = 'Shipment $shipmentId created successfully.';
+      _apiService.logToServer(
+          'INFO', 'Manual shipment created', {'shipmentId': shipmentId});
+      await refreshShipments();
+      selectShipment(shipmentId);
+    } catch (e) {
+      errorMessage = 'Failed to create shipment: ${e.toString()}';
+      _apiService.logToServer(
+          'ERROR', 'Manual shipment creation failed', {'error': e.toString()});
+      throw e;
+    } finally {
       notifyListeners();
     }
   }
@@ -149,11 +184,14 @@ class DashboardController extends ChangeNotifier {
 
     try {
       await _apiService.applyRoute(shipmentId);
-      successMessage = 'Optimized route applied for $shipmentId — vehicle notified.';
-      _apiService.logToServer('INFO', 'Optimized route applied', {'shipmentId': shipmentId});
+      successMessage =
+          'Optimized route applied for $shipmentId — vehicle notified.';
+      _apiService.logToServer(
+          'INFO', 'Optimized route applied', {'shipmentId': shipmentId});
     } catch (e) {
       errorMessage = 'Failed to apply route. Please try again.';
-      _apiService.logToServer('ERROR', 'Apply route failed', {'shipmentId': shipmentId, 'error': e.toString()});
+      _apiService.logToServer('ERROR', 'Apply route failed',
+          {'shipmentId': shipmentId, 'error': e.toString()});
     } finally {
       notifyListeners();
     }
@@ -176,7 +214,8 @@ class DashboardController extends ChangeNotifier {
     } catch (e) {
       isSimulating = false;
       errorMessage = 'Failed to start live simulation';
-      _apiService.logToServer('ERROR', 'Failed to start simulation', {'error': e.toString()});
+      _apiService.logToServer(
+          'ERROR', 'Failed to start simulation', {'error': e.toString()});
     } finally {
       notifyListeners();
     }
