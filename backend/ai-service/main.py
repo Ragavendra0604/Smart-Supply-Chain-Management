@@ -77,7 +77,7 @@ except Exception as e:
     print(f"Warning: Could not load production model: {e}")
     ml_model = None
 
-def get_ml_delay_prediction_v3(route: Dict[str, Any], weather: Dict[str, Any]) -> float:
+def get_ml_delay_prediction_v3(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD") -> float:
     """
     Uses the trained XGBoost model with cyclical time features.
     Features: distance_km, traffic_index, weather_severity, is_holiday, hour_sin, hour_cos, day_of_week
@@ -87,7 +87,13 @@ def get_ml_delay_prediction_v3(route: Dict[str, Any], weather: Dict[str, Any]) -
         
     try:
         # 1. Feature: Distance
-        dist_km = (route.get("distance_meters") or 0) / 1000.0
+        dist_km = 0.0
+        raw_dist = route.get("distance_meters")
+        if raw_dist is not None:
+            dist_km = float(raw_dist) / 1000.0
+        else:
+            dist_str = str(route.get("distance", "0")).split()[0].replace(",", "")
+            dist_km = float(dist_str) if dist_str else 0.0
         
         # 2. Feature: Traffic Index (Normalized 1-5)
         base_dur = route.get("duration_seconds") or 1
@@ -124,10 +130,104 @@ def get_ml_delay_prediction_v3(route: Dict[str, Any], weather: Dict[str, Any]) -
         }])
         
         prediction = ml_model.predict(features)[0]
+        
+        # --- FIX: Multi-modal baseline adjustments ---
+        # If mode is not ROAD, the XGBoost model (trained on road data) is less accurate.
+        # We add a mode-specific bias.
+        mode_upper = mode.upper()
+        if mode_upper == "AIR":
+            prediction *= 0.4 # Air is generally faster/less prone to ground traffic
+        elif mode_upper == "SEA":
+            prediction *= 2.5 # Sea is slower and delays are much longer
+            
         return round(float(prediction), 2)
     except Exception as e:
-        print(f"ML Prediction Error: {e}")
+        logger.error(f"ML Prediction Error: {e}")
         return 0.0
+
+def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD") -> List[Dict[str, Any]]:
+    """
+    Centralized logic to score routes based on ML predictions and multi-objective ranking.
+    """
+    COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
+    FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
+    
+    processed_routes = []
+    
+    for i, route in enumerate(routes):
+        # Robust distance parsing
+        dist_km = 0.0
+        try:
+            raw_dist = route.get("distance_meters")
+            if raw_dist is not None:
+                dist_km = float(raw_dist) / 1000.0
+            else:
+                dist_str = str(route.get("distance", "0")).split()[0].replace(",", "")
+                dist_km = float(dist_str) if dist_str else 0.0
+        except (ValueError, IndexError):
+            dist_km = 0.0
+
+        # Robust duration parsing
+        duration_min = 0
+        try:
+            raw_dur = route.get("duration_seconds")
+            if raw_dur is not None:
+                duration_min = int(float(raw_dur) / 60)
+            else:
+                dur_str = str(route.get("duration", "0")).split()[0]
+                duration_min = int(dur_str) if dur_str.isdigit() else 0
+        except (ValueError, IndexError):
+            duration_min = 0
+
+        # Calculate Costs
+        total_cost = round(dist_km * COST_PER_KM, 2)
+        total_fuel = round(dist_km * FUEL_PER_KM, 1)
+
+        # Risk Scoring
+        predicted_delay_mins = get_ml_delay_prediction_v3(route, weather, mode)
+            
+        risk_score = 0.0
+        if duration_min > 0:
+            # RELATIVE RISK: delay as % of trip. 
+            risk_ratio = predicted_delay_mins / duration_min
+            risk_score = round(min(risk_ratio * 2.0, 1.0), 3) 
+        else:
+            risk_score = 0.0
+
+        processed_routes.append({
+            "summary": route.get("summary", f"Route {i+1}"),
+            "distance_km": dist_km,
+            "travel_time_min": duration_min,
+            "total_cost": total_cost,
+            "total_fuel": total_fuel,
+            "risk_level": "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH",
+            "risk_score": risk_score,
+            "predicted_delay_mins": predicted_delay_mins,
+            "is_recommended": False,
+            "path": route.get("path", [])
+        })
+
+    # Multi-Objective Ranking
+    if processed_routes:
+        max_time = max(r["travel_time_min"] for r in processed_routes) or 1
+        max_cost = max(r["total_cost"] for r in processed_routes) or 1
+        
+        best_score = float('inf')
+        best_route_index = 0
+        for i, r in enumerate(processed_routes):
+            time_factor = r["travel_time_min"] / max_time
+            cost_factor = r["total_cost"] / max_cost
+            risk_factor = r["risk_score"]
+            
+            composite_score = (time_factor * 0.4) + (cost_factor * 0.4) + (risk_factor * 0.2)
+            
+            if composite_score < best_score:
+                best_score = composite_score
+                best_route_index = i
+
+        processed_routes[best_route_index]["is_recommended"] = True
+        
+    return processed_routes
 
 # -------- INPUT MODEL --------
 class InputData(BaseModel):
@@ -175,60 +275,23 @@ def generate_logistics_insight(prediction: float, data: InputData) -> str:
 
             ## OUTPUT STRUCTURE (STRICT)
 
-            Provide EXACTLY 10–12 sentences. Follow this structure:
-
-            1. **Root Cause Analysis**  
-            Clearly explain the most likely cause of the delay by correlating traffic, weather, and external disruptions.
-
-            2. **Primary Risk Assessment**  
-            Quantify severity (Low / Medium / High) and explain operational impact.
-
-            3. **Immediate Action Recommendation**  
-            Suggest ONE clear action:
-            - Reroute
-            - Mode switch (Road → Air/Sea)
-            - Delay departure
-            - Maintain route (if safe)
-
-            4. **Alternative Strategy**  
-            Provide a secondary fallback option.
-
-            5. **Time Impact Justification**  
-            Explain how your recommendation reduces delay or risk.
-
-            6. **Operational Considerations**  
-            Mention cost, fuel, compliance, or resource implications.
-
-            7. **Geographical / Route Insight**  
-            Highlight any route-specific or region-specific risk patterns.
-
-            8. **Predictive Insight**  
-            Briefly mention how conditions may evolve in next few hours.
-
-            9. **Confidence Level**  
-            State confidence (e.g., "Confidence: 78%") based on data reliability.
-
-            10. **Final Executive Summary**  
-            One strong concluding sentence for decision-making.
+            Provide EXACTLY 5–7 sentences. Follow this structure:
+            1. Root cause of delay.
+            2. Severity & operational impact.
+            3. Recommended Action (Reroute/Maintain/Switch).
+            4. Potential fallback or cost consideration.
+            5. Confidence level and final summary.
 
             ---
 
             ## STYLE REQUIREMENTS
-
             - Professional, concise, and authoritative
-            - No generic advice
-            - No repetition
-            - Avoid vague statements like "it may" or "possibly"
             - Use deterministic, decision-ready language
-            - Focus on real logistics impact
 
             ---
 
             ## IMPORTANT
-
             - Base reasoning ONLY on provided data
-            - Do NOT hallucinate unknown data
-            - Prioritize actionability over explanation
 
             ---
 
@@ -236,7 +299,7 @@ def generate_logistics_insight(prediction: float, data: InputData) -> str:
             """
         
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt
         )
         return response.text.strip()
@@ -293,148 +356,63 @@ async def handle_pubsub(request: Request):
 
             if event_type == "shipment.location_updated":
                 shipment_id = data.get("shipment_id")
+                msg_timestamp = payload.get("timestamp") # Use the payload timestamp
                 if not shipment_id:
                     logger.error("Missing shipment_id in Pub/Sub event data")
                     return JSONResponse(status_code=200, content={"status": "missing_shipment_id"})
-                await process_ai_analysis(shipment_id)
+                await process_ai_analysis(shipment_id, msg_timestamp)
 
         return JSONResponse(status_code=200, content={"status": "success"})
 
+    except json.JSONDecodeError as e:
+        logger.error(f"Malformed JSON in Pub/Sub: {str(e)}")
+        return JSONResponse(status_code=200, content={"status": "malformed_json"})
     except Exception as e:
         error_msg = f"Pub/Sub Processing Error: {traceback.format_exc()}"
         logger.error(error_msg)
-        # FIX: Return HTTP 500 so Cloud Pub/Sub retries delivery.
-        # Previously this returned 200 which silently dropped failed messages.
+        # HTTP 500 triggers Cloud Pub/Sub retry.
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
-async def process_ai_analysis(shipment_id: str):
+async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = None):
     """Heavy lifting happens here, fully decoupled from user request"""
     doc_ref = db.collection("shipments").document(shipment_id)
-    # 2. Dynamic Evaluation Constants
-    COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
-    FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
     
     # --- RACE CONDITION PROTECTION ---
-    # Fetch existing data to check timestamps
     shipment_snapshot = doc_ref.get()
     if not shipment_snapshot.exists:
         logger.warning(f"Shipment {shipment_id} disappeared during processing.")
         return
         
     shipment_data = shipment_snapshot.to_dict()
+    if shipment_data.get("status") in ["STOPPED", "COMPLETED", "CANCELLED"]:
+        return
+    
     existing_ai = shipment_data.get("aiResponse", {})
     last_analyzed = existing_ai.get("last_analyzed")
     
-    # If we already have a newer analysis in the DB, stop to avoid overwriting with stale data.
-    # Note: Pub/Sub messages can arrive out of order.
-    current_msg_time = datetime.now() 
-    if last_analyzed:
-        # last_analyzed is a Firestore Timestamp
-        if last_analyzed.replace(tzinfo=None) > current_msg_time:
-            logger.info(f"Skipping stale analysis for {shipment_id}")
-            return
+    # Improved Timestamp Comparison
+    if last_analyzed and msg_timestamp:
+        try:
+            msg_dt = datetime.fromisoformat(msg_timestamp.replace("Z", "+00:00"))
+            if last_analyzed.replace(tzinfo=None) > msg_dt.replace(tzinfo=None):
+                logger.info(f"Skipping stale analysis for {shipment_id}")
+                return
+        except ValueError:
+            pass # Fallback to processing if timestamp is malformed
 
     route_data = shipment_data.get("routeData", [])
     if not isinstance(route_data, list): route_data = [route_data]
     mode = shipment_data.get("vehicle_type", "ROAD")
-    
-    # 3. Process All Available Routes
-    processed_routes = []
-    best_route_index = 0
-    min_score = float('inf')
-
-    # Fetch weather for ML features (use cached value from shipment doc)
     weather_for_ml = shipment_data.get("weatherData", {})
 
-    for i, route in enumerate(route_data):
-        # --- FIX: Robust distance parsing ---
-        # Handles: "350 km", "1,234.5 km", "217 miles", numeric values
-        dist_km = 0.0
-        try:
-            raw_dist = route.get("distance_meters")
-            if raw_dist is not None:
-                dist_km = float(raw_dist) / 1000.0
-            else:
-                dist_str = str(route.get("distance", "0")).split()[0].replace(",", "")
-                dist_km = float(dist_str) if dist_str else 0.0
-        except (ValueError, IndexError):
-            dist_km = 0.0
+    # Use centralized scoring engine
+    processed_routes = score_and_rank_routes(route_data, weather_for_ml, mode)
+    
+    if not processed_routes:
+        return
 
-        # --- FIX: Robust duration parsing ---
-        # Prefer raw seconds (always available from Maps API)
-        duration_min = 0
-        try:
-            raw_dur = route.get("duration_seconds")
-            if raw_dur is not None:
-                duration_min = int(float(raw_dur) / 60)
-            else:
-                dur_str = str(route.get("duration", "0")).split()[0]
-                duration_min = int(dur_str) if dur_str.isdigit() else 0
-        except (ValueError, IndexError):
-            duration_min = 0
-
-        # Calculate Costs
-        total_cost = round(dist_km * COST_PER_KM, 2)
-        total_fuel = round(dist_km * FUEL_PER_KM, 1)
-
-        # --- LOGIC UPGRADE: Relative Risk Scoring ---
-        # Risk should be relative to total duration. 
-        # A 20min delay on a 30min trip is HIGH. On a 10hr trip, it's LOW.
-        risk_score = 0.0
-        predicted_delay_mins = 0.0
-        
-        if ml_model:
-            predicted_delay_mins = get_ml_delay_prediction_v3(route, weather_for_ml)
-        else:
-            # Heuristic fallback: 10% base delay
-            predicted_delay_mins = duration_min * 0.1
-            
-        if duration_min > 0:
-            # RELATIVE RISK: delay as % of trip. 
-            # Example: 15% delay = 0.3 risk (LOW/MED boundary)
-            # Example: 35% delay = 0.7 risk (MED/HIGH boundary)
-            risk_ratio = predicted_delay_mins / duration_min
-            risk_score = round(min(risk_ratio * 2.0, 1.0), 3) 
-        else:
-            risk_score = 0.0
-
-        processed_routes.append({
-            "summary": route.get("summary", f"Route {i+1}"),
-            "distance_km": dist_km,
-            "travel_time_min": duration_min,
-            "total_cost": total_cost,
-            "total_fuel": total_fuel,
-            "risk_level": "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH",
-            "risk_score": risk_score,
-            "predicted_delay_mins": predicted_delay_mins,
-            "is_recommended": False
-        })
-
-    # --- LOGIC UPGRADE: Multi-Objective Ranking ---
-    # We rank routes based on a Composite Score: 40% Time, 40% Cost, 20% Risk.
-    if processed_routes:
-        # Find max values for normalization to avoid bias
-        max_time = max(r["travel_time_min"] for r in processed_routes) or 1
-        max_cost = max(r["total_cost"] for r in processed_routes) or 1
-        
-        best_score = float('inf')
-        for i, r in enumerate(processed_routes):
-            # Lower is better
-            time_factor = r["travel_time_min"] / max_time
-            cost_factor = r["total_cost"] / max_cost
-            risk_factor = r["risk_score"] # already 0-1
-            
-            composite_score = (time_factor * 0.4) + (cost_factor * 0.4) + (risk_factor * 0.2)
-            
-            if composite_score < best_score:
-                best_score = composite_score
-                best_route_index = i
-
-        # Mark the best route
-        processed_routes[best_route_index]["is_recommended"] = True
-        
-    # 4. Extract Before/After for Comparison (comparing first route vs recommended)
-    best = processed_routes[best_route_index]
+    # Find recommended route
+    best = next((r for r in processed_routes if r["is_recommended"]), processed_routes[0])
     current = processed_routes[0]
     
     optimization_data = {
@@ -451,24 +429,24 @@ async def process_ai_analysis(shipment_id: str):
     }
 
     # 5. Generate Real AI Insight
-    # Pass calculated metrics to Gemini for professional reasoning
     input_data = InputData(
         shipment_id=shipment_id,
         origin=shipment_data.get("origin", "Unknown"),
         destination=shipment_data.get("destination", "Unknown"),
         routeData=route_data,
-        weatherData=shipment_data.get("weatherData", {})
+        weatherData=weather_for_ml,
+        mode=mode
     )
     insight = generate_logistics_insight(best['risk_score'], input_data)
     
-    # 6. Update Firestore with 100% Dynamic Data
+    # 6. Update Firestore
     doc_ref.update({
         "aiResponse": {
             "success": True,
             "risk_score": best['risk_score'],
             "risk_level": best['risk_level'],
-            "delay_prediction": f"{best['travel_time_min']} mins",
-            "suggestion": f"Switch to {best['summary']} for optimal safety and efficiency." if best_route_index != 0 else "Maintain current optimal route.",
+            "delay_prediction": f"{best['predicted_delay_mins']} mins",
+            "suggestion": f"Switch to {best['summary']} for optimal safety and efficiency." if best is not current else "Maintain current optimal route.",
             "insight": insight,
             "optimization_data": optimization_data,
             "all_routes": processed_routes,
@@ -476,7 +454,6 @@ async def process_ai_analysis(shipment_id: str):
         }
     })
     logger.info(f"Dynamic AI Analysis complete for {shipment_id}")
-
 
 @app.post("/predict")
 def predict(data: InputData):
@@ -489,43 +466,14 @@ def predict(data: InputData):
             raw_routes = [raw_routes]
             
         weather = data.weatherData or {}
+        mode = data.mode or "ROAD"
         
-        scored_routes = []
-        for route in raw_routes:
-            if not isinstance(route, dict): continue
-            
-            # Use upgraded V3 prediction
-            try:
-                predicted_delay = get_ml_delay_prediction_v3(route, weather)
-            except Exception:
-                predicted_delay = 5.0 # Fallback 5 min delay
-            
-            # --- LOGIC ALIGNMENT: Relative Risk ---
-            # Extract duration_min safely
-            try:
-                raw_dur = route.get("duration_seconds")
-                if raw_dur is not None:
-                    duration_min = int(float(raw_dur) / 60)
-                else:
-                    dur_str = str(route.get("duration", "0")).split()[0]
-                    duration_min = int(dur_str) if dur_str.isdigit() else 0
-            except (ValueError, IndexError):
-                duration_min = 60 # Default 1hr if unknown
-                
-            risk_score = 0.0
-            if duration_min > 0:
-                risk_ratio = predicted_delay / duration_min
-                risk_score = round(min(risk_ratio * 2.0, 1.0), 3)
-            
-            scored_routes.append({
-                **route,
-                "risk_score": risk_score,
-                "predicted_delay_mins": predicted_delay,
-            })
+        # Use centralized scoring engine
+        scored_routes = score_and_rank_routes(raw_routes, weather, mode)
 
         # 2. Safety check for empty results
         if not scored_routes:
-            print("⚠️ No valid routes found in request, returning fallback")
+            logger.warning("No valid routes found in request, returning fallback")
             return {
                 "success": True,
                 "risk_score": 0.1,
@@ -536,9 +484,8 @@ def predict(data: InputData):
                 "all_routes": []
             }
 
-        # 3. Sort and pick best
-        scored_routes.sort(key=lambda x: x["predicted_delay_mins"])
-        best = scored_routes[0]
+        # 3. Pick recommended
+        best = next((r for r in scored_routes if r["is_recommended"]), scored_routes[0])
 
         # 4. Generate Gemini Insight
         try:
@@ -556,7 +503,7 @@ def predict(data: InputData):
             "all_routes": scored_routes
         }
     except Exception as e:
-        print(f"🔥 Critical Prediction Error: {str(e)}")
+        logger.error(f"Critical Prediction Error: {str(e)}")
         return {
             "success": True,
             "risk_score": 0.0,

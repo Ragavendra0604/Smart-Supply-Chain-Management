@@ -15,6 +15,7 @@ The platform operates on a closed-loop system to ensure constant reliability:
 3.  **Optimize**: Automated re-routing suggestions if the current path becomes high-risk.
 4.  **Notify**: Instant push notifications via FCM for critical disruptions.
 5.  **Update**: Real-time Firestore sync ensures the UI reflects the latest intelligence.
+6.  **Production Hardening**: In-memory caching for stats and race condition protection for telemetry.
 
 ### Core Value Proposition
 - **Live Risk Scoring**: Combines traffic congestion, weather severity, and local news (accidents, strikes) into a single 0-1 risk score.

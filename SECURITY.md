@@ -11,6 +11,8 @@ This project is an MVP/prototype. It includes basic security controls suitable f
 - Backend includes simple IP-based rate limiting.
 - Shipment IDs and coordinates are validated before writes.
 - Firebase Admin SDK key path can be configured with `FIREBASE_SERVICE_ACCOUNT_PATH`.
+- Secret Manager integration for critical API keys and credentials.
+- Idempotency support for telemetry updates.
 - Flutter Firebase client config is disabled by default and can be enabled with `--dart-define=ENABLE_FIREBASE=true`.
 
 ## Before Public Submission
@@ -47,5 +49,5 @@ The backend should remain the only writer because it uses Firebase Admin SDK.
 - No role-based authorization yet.
 - No persistent distributed rate limiter yet.
 - No audit logging yet.
-- No secret manager integration yet.
+- Secret manager integration implemented.
 - No HTTPS deployment config yet.
