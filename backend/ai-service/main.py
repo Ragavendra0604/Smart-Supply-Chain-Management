@@ -117,7 +117,7 @@ class InputData(BaseModel):
 # -------- GENERATIVE AI INSIGHTS --------
 def generate_logistics_insight(prediction: float, data: InputData) -> str:
     """
-    Uses Gemini 2.0 Flash to explain the risk and suggest tactical moves.
+    Uses Gemini 2.5 Flash to explain the risk and suggest tactical moves.
     """
     if client is None:
         return "Insight unavailable (AI connection pending)."
@@ -266,8 +266,8 @@ async def handle_pubsub(request: Request):
         return {"status": "success"} # Ack the message
     except Exception as e:
         print(f"Pub/Sub Processing Error: {traceback.format_exc()}")
-        # Returning 500 tells Pub/Sub to retry with exponential backoff
-        raise HTTPException(status_code=500, detail=str(e))
+        # Returning 200 acknowledges the message and stops the retry loop.
+        return {"status": "error", "message": str(e)}
 async def process_ai_analysis(shipment_id: str):
     """Heavy lifting happens here, fully decoupled from user request"""
     doc_ref = db.collection("shipments").document(shipment_id)
