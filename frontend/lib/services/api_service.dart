@@ -14,7 +14,11 @@ class ApiService {
   final Future<String?> Function()? _getToken;
 
   Future<Map<String, String>> _getHeaders() async {
-    final headers = {'Content-Type': 'application/json'};
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final headers = {
+      'Content-Type': 'application/json',
+      'x-idempotency-key': 'req-$timestamp',
+    };
     if (_getToken != null) {
       final token = await _getToken!();
       if (token != null) {
@@ -112,15 +116,19 @@ class ApiService {
     }
   }
 
-  Future<void> startBackendSimulator() async {
+  Future<void> startBackendSimulator({
+    required String shipmentId,
+    required String origin,
+    required String destination,
+  }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/simulator/start');
     final response = await _client.post(
       uri,
       headers: await _getHeaders(),
       body: jsonEncode({
-        'shipment_id': 'SHP001',
-        'origin': 'Chennai',
-        'destination': 'Bangalore'
+        'shipment_id': shipmentId,
+        'origin': origin,
+        'destination': destination,
       }),
     );
     if (response.statusCode >= 400) {

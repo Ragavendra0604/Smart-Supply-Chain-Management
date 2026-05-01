@@ -29,7 +29,7 @@ class _DashboardMapState extends State<DashboardMap> {
   }
 
   Future<void> _loadTruckIcon() async {
-    final icon = await BitmapDescriptor.fromAssetImage(
+    final icon = await BitmapDescriptor.asset(
       const ImageConfiguration(size: Size(48, 48)),
       'assets/images/truck.png',
     );
@@ -100,7 +100,7 @@ class _DashboardMapState extends State<DashboardMap> {
           riskMarkerHue(widget.shipment.riskLevel),
         ),
         infoWindow: const InfoWindow(title: 'Live vehicle'),
-        zIndex: 2,
+        zIndexInt: 2,
       ),
       Marker(
         markerId: const MarkerId('current_pin'),

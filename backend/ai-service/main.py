@@ -250,7 +250,11 @@ async def handle_pubsub(request: Request):
         pubsub_message = envelope["message"]
         if "data" in pubsub_message:
             decoded_data = base64.b64decode(pubsub_message["data"]).decode("utf-8")
-            payload = json.loads(decoded_data)
+            try:
+                payload = json.loads(decoded_data)
+            except json.JSONDecodeError:
+                import ast
+                payload = ast.literal_eval(decoded_data)
             
             event_type = payload.get("eventType")
             data = payload.get("data", {})

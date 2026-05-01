@@ -53,7 +53,7 @@ class _LoginScreenState extends State<LoginScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              theme.primaryColor.withOpacity(0.8),
+              theme.primaryColor.withValues(alpha: 0.8),
               theme.primaryColor,
               Colors.black,
             ],
@@ -97,7 +97,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(24),
                     ),
-                    color: Colors.white.withOpacity(0.9),
+                    color: Colors.white.withValues(alpha: 0.9),
                     child: Padding(
                       padding: const EdgeInsets.all(32.0),
                       child: Form(

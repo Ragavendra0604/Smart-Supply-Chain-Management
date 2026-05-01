@@ -63,6 +63,32 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+                if (controller.successMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            controller.successMessage!,
+                            style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 16, color: AppTheme.success),
+                          onPressed: () => controller.successMessage = null,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

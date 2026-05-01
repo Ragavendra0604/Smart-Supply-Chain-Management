@@ -38,6 +38,7 @@ class DashboardController extends ChangeNotifier {
   String? simulatingShipmentId;
   bool usingFirestore = false;
   String? errorMessage;
+  String? successMessage;
   DateTime? lastUpdated;
 
   StreamSubscription<Shipment>? _activeShipmentSubscription;
@@ -112,6 +113,7 @@ class DashboardController extends ChangeNotifier {
     if (shipmentId == activeShipmentId) return;
     activeShipmentId = shipmentId;
     errorMessage = null;
+    successMessage = null;
     _bindShipment(shipmentId);
     notifyListeners();
   }
@@ -133,11 +135,15 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  Future<void> startLiveSimulation() async {
+  Future<void> startLiveSimulation(Shipment shipment) async {
     isSimulating = true;
     notifyListeners();
     try {
-      await _apiService.startBackendSimulator();
+      await _apiService.startBackendSimulator(
+        shipmentId: shipment.shipmentId,
+        origin: shipment.origin,
+        destination: shipment.destination,
+      );
       errorMessage = null;
     } catch (e) {
       isSimulating = false;
@@ -218,6 +224,7 @@ class DashboardController extends ChangeNotifier {
     isSimulating = true;
     simulatingShipmentId = targetShipment.shipmentId;
     errorMessage = null;
+    successMessage = null;
     notifyListeners();
 
     _simulationTimer = Timer.periodic(
@@ -296,13 +303,18 @@ class DashboardController extends ChangeNotifier {
       return;
     }
 
+    final isDestination = _simulationIndex >= shipment.route.path.length - 1;
     final newPoint = shipment.route.path[_simulationIndex];
 
     // OPTIMISTIC UPDATE: Update local state immediately for smooth animation
     final updatedShipment = shipment.copyWith(
       currentLocation: newPoint,
-      status: 'IN_TRANSIT',
+      status: isDestination ? 'DELIVERED' : 'IN_TRANSIT',
     );
+
+    if (isDestination) {
+      successMessage = 'Shipment $targetId has arrived at its destination!';
+    }
 
     _syncShipmentSummary(updatedShipment);
     if (activeShipmentId == targetId) {
@@ -315,8 +327,12 @@ class DashboardController extends ChangeNotifier {
         shipmentId: targetId,
         point: newPoint,
       );
-      final step = (shipment.route.path.length / 100).ceil();
-      _simulationIndex += step <= 0 ? 1 : step;
+      if (isDestination) {
+        _stopSimulation();
+      } else {
+        final step = (shipment.route.path.length / 100).ceil();
+        _simulationIndex += step <= 0 ? 1 : step;
+      }
     } catch (_) {
       errorMessage = 'Simulation update failed.';
     }
