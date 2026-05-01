@@ -16,6 +16,8 @@ import os
 import base64
 import traceback
 from datetime import datetime
+import logging
+from logging.handlers import RotatingFileHandler
 
 app = FastAPI()
 db = firestore.Client()
@@ -29,6 +31,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- CENTRALIZED LOGGING UTILITY ---
+LOG_DIR = os.path.join(os.path.dirname(__file__), "../../logs")
+if not os.path.exists(LOG_DIR):
+    os.makedirs(LOG_DIR)
+
+log_formatter = logging.Formatter('{"timestamp": "%(asctime)s", "service": "AI_SERVICE", "level": "%(levelname)s", "message": "%(message)s"}')
+log_handler = RotatingFileHandler(os.path.join(LOG_DIR, "ai_service.log"), maxBytes=5*1024*1024, backupCount=2)
+log_handler.setFormatter(log_formatter)
+
+logger = logging.getLogger("ai_service")
+logger.setLevel(logging.INFO)
+logger.addHandler(log_handler)
+logger.addHandler(logging.StreamHandler()) # Also print to console
 
 # -------- AUTHENTICATION --------
 try:
@@ -265,7 +281,8 @@ async def handle_pubsub(request: Request):
                 
         return {"status": "success"} # Ack the message
     except Exception as e:
-        print(f"Pub/Sub Processing Error: {traceback.format_exc()}")
+        error_msg = f"Pub/Sub Processing Error: {traceback.format_exc()}"
+        logger.error(error_msg)
         # Returning 200 acknowledges the message and stops the retry loop.
         return {"status": "error", "message": str(e)}
 
@@ -369,7 +386,7 @@ async def process_ai_analysis(shipment_id: str):
             "last_analyzed": firestore.SERVER_TIMESTAMP
         }
     })
-    print(f"Dynamic AI Analysis complete for {shipment_id}")
+    logger.info(f"Dynamic AI Analysis complete for {shipment_id}")
 
 
 @app.post("/predict")

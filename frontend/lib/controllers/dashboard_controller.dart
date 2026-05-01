@@ -57,12 +57,15 @@ class DashboardController extends ChangeNotifier {
       ]);
       if (activeShipmentId != null) {
         _bindShipment(activeShipmentId!);
+        _apiService.logToServer('INFO', 'Dashboard bootstrapped', {'activeShipment': activeShipmentId});
       } else {
         errorMessage =
             'No shipments found. Create or analyze a shipment first.';
+        _apiService.logToServer('WARNING', 'No shipments found during bootstrap');
       }
     } catch (error) {
       errorMessage = 'Unable to load dashboard data.';
+      _apiService.logToServer('ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
     } finally {
       isBootstrapping = false;
       notifyListeners();
@@ -127,8 +130,10 @@ class DashboardController extends ChangeNotifier {
 
     try {
       await _aiService.refreshPrediction(shipmentId);
-    } catch (_) {
+      _apiService.logToServer('INFO', 'AI analysis refreshed', {'shipmentId': shipmentId});
+    } catch (e) {
       errorMessage = 'AI refresh failed. Please try again.';
+      _apiService.logToServer('ERROR', 'AI refresh failed', {'shipmentId': shipmentId, 'error': e.toString()});
     } finally {
       isRefreshingAi = false;
       notifyListeners();
@@ -145,12 +150,17 @@ class DashboardController extends ChangeNotifier {
         destination: shipment.destination,
       );
       errorMessage = null;
+      _apiService.logToServer('INFO', 'Simulation started', {
+        'shipmentId': shipment.shipmentId,
+        'route': '${shipment.origin} -> ${shipment.destination}'
+      });
     } catch (e) {
       isSimulating = false;
       errorMessage = 'Failed to start live simulation';
-      rethrow;
+      _apiService.logToServer('ERROR', 'Failed to start simulation', {'error': e.toString()});
+    } finally {
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   Future<void> stopLiveSimulation() async {

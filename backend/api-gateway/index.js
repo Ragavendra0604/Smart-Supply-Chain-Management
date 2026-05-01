@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
+import { createWriteStream } from 'fs';
 
 import { db, initializeFirebase } from './config/firebase.js';
 import shipmentRoutes from './routes/shipmentRoutes.js';
@@ -22,11 +24,56 @@ import { processIdempotentRequest } from './utils/idempotency.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
+// --- CENTRALIZED LOGGING UTILITY ---
+const logDir = path.join(__dirname, '../../logs');
+let gatewayLogStream = null;
+
+try {
+  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+  gatewayLogStream = createWriteStream(path.join(logDir, 'gateway.log'), { flags: 'a' });
+} catch (err) {
+  console.log('⚠️ Local log file creation failed (expected in Cloud Run). Streaming to stdout only.');
+}
+
+const sysLog = (service, level, message, data = {}) => {
+  const timestamp = new Date().toISOString();
+  const entry = JSON.stringify({ timestamp, service, level, message, ...data });
+  
+  if (gatewayLogStream) {
+    gatewayLogStream.write(entry + '\n');
+  }
+  
+  // Standard output is automatically captured by GCP Cloud Logging
+  console.log(entry);
+};
+
+// Request Logging Middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    sysLog('GATEWAY', 'INFO', `${req.method} ${req.originalUrl}`, {
+      status: res.statusCode,
+      duration: `${duration}ms`,
+      ip: req.ip
+    });
+  });
+  next();
+});
+
 app.use(securityHeaders);
 app.use(cors(corsOptions));
 app.use(rateLimiter);
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+/* --- FRONTEND LOGGING BRIDGE --- */
+app.post('/api/logs', (req, res) => {
+  const { level, message, data } = req.body;
+  sysLog('FRONTEND', level || 'INFO', message, data);
+  res.status(204).send();
+});
 
 
 /* -----------------------------------------------------------------------

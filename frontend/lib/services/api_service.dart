@@ -6,7 +6,7 @@ import '../core/config/app_config.dart';
 import '../models/shipment.dart';
 
 class ApiService {
-  ApiService({http.Client? client, Future<String?> Function()? getToken}) 
+  ApiService({http.Client? client, Future<String?> Function()? getToken})
       : _client = client ?? http.Client(),
         _getToken = getToken;
 
@@ -88,18 +88,26 @@ class ApiService {
     required double lng,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/update-location');
-    final response = await _client.post(
-      uri,
-      headers: await _getHeaders(),
-      body: jsonEncode({
-        'shipment_id': shipmentId,
-        'lat': lat,
-        'lng': lng,
-      }),
-    );
+    // final response = await _client.post(
+    //   uri,
+    //   headers: await _getHeaders(),
+    //   body: jsonEncode({
+    try {
+      final response = await _client.post(
+        uri,
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'shipment_id': shipmentId,
+          'lat': lat,
+          'lng': lng,
+        }),
+      );
 
-    if (response.statusCode >= 400) {
-      throw Exception('Location update failed');
+      if (response.statusCode >= 400) {
+        throw Exception('Location update failed');
+      }
+    } catch (e) {
+      throw Exception('Failed to update location: $e');
     }
   }
 
@@ -139,5 +147,22 @@ class ApiService {
   Future<void> stopBackendSimulator() async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/simulator/stop');
     await _client.post(uri, headers: await _getHeaders());
+  }
+
+  Future<void> logToServer(String level, String message, [Map<String, dynamic>? data]) async {
+    try {
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/logs');
+      await _client.post(
+        uri,
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'level': level,
+          'message': message,
+          'data': data,
+        }),
+      );
+    } catch (e) {
+      print('Remote logging failed: $e');
+    }
   }
 }
