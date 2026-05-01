@@ -3,12 +3,10 @@ import axios from 'axios';
 import { db } from '../config/firebase.js';
 import mapsService from '../services/mapsService.js';
 
-// --- PRODUCTION SIMULATOR ENGINE ---
-// Maps shipmentId -> { interval, path, index }
-// This allows multiple concurrent simulations for different shipments.
+// --- PRODUCTION SIMULATOR ENGINE (V4) ---
+// Multi-tenant Map: shipmentId -> State Object
 const activeSimulations = new Map();
 
-// Internal Headers for Simulator to talk to API Gateway
 const getSimHeaders = (idempotencyKey = null) => {
   const headers = {
     'x-simulator-secret': process.env.SIMULATOR_SECRET || 'hackathon-2026-secret',
@@ -18,162 +16,158 @@ const getSimHeaders = (idempotencyKey = null) => {
   return headers;
 };
 
+/**
+ * Entry point: Starts a dynamic, event-driven simulation for a specific shipment.
+ */
 const startSimulator = async (req, res) => {
   const { shipment_id } = req.body || {};
 
   if (!shipment_id) {
-    return res.status(400).json({ success: false, message: 'shipment_id is required to start simulation' });
+    return res.status(400).json({ success: false, message: 'shipment_id is required' });
   }
 
   if (activeSimulations.has(shipment_id)) {
-    return res.status(400).json({ success: false, message: `Simulation already running for ${shipment_id}` });
+    return res.status(400).json({ success: false, message: 'Simulation already active' });
   }
 
   try {
-    // --- DYNAMIC DATA FETCHING ---
-    // Instead of hardcoding defaults, we pull the truth from Firestore
+    // 1. DYNAMIC FETCH: Pull the truth from Firestore (No hardcoding)
     const shipmentDoc = await db().collection('shipments').doc(shipment_id).get();
     if (!shipmentDoc.exists) {
-      return res.status(404).json({ success: false, message: `Shipment ${shipment_id} not found. Create it first.` });
+      return res.status(404).json({ success: false, message: 'Shipment record not found' });
     }
 
     const { origin, destination } = shipmentDoc.data();
-    console.log(`📦 [SIMULATOR] Starting Dynamic Engine for ${shipment_id} (${origin} -> ${destination})`);
-    
-    const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
-    
-    // 1. Fetch Route Data (Centralized)
+    console.log(`📦 [SIMULATOR] Launching Engine: ${shipment_id} (${origin} -> ${destination})`);
+
+    // 2. FETCH REAL ROUTE DATA
     const routes = await mapsService.getRoute(origin, destination);
     const route = routes[0];
-    
-    // 2. Start Vehicle Movement (Every 5 seconds)
-    // We target 5 AI analysis points per trip (Start, 25%, 50%, 75%, Destination)
-    const checkpointStep = Math.max(1, Math.floor(route.path.length / 4));
-    
+
+    // 3. INITIALIZE STATE
     const state = {
       path: route.path,
-      landmarks: route.landmarks || [], // New: Store landmarks
+      landmarks: route.landmarks || [],
       index: 0,
       shipment_id,
-      checkpointStep,
-      interval: null
+      checkpointStep: Math.max(1, Math.floor(route.path.length / 4)),
+      isActive: true,
+      timeoutId: null
     };
-
-    state.interval = setInterval(async () => {
-      if (state.index >= state.path.length) {
-        console.log(`🏁 [SIMULATOR] Shipment ${shipment_id} reached destination.`);
-        stopSimulationLogic(shipment_id);
-        return;
-      }
-      
-      const point = state.path[state.index];
-      const lat = point.lat || point[0];
-      const lng = point.lng || point[1];
-
-      try {
-        const idempotencyKey = `sim-${shipment_id}-${state.index}`;
-        
-        // --- CHECKPOINT LOGIC: Reduce Gemini Cost ---
-        const doc = await db().collection('shipments').doc(shipment_id).get();
-        const currentData = doc.data() || {};
-        
-        // --- LOGIC UPGRADE: Risk-Aware Override ---
-        // If the last analysis showed HIGH risk, we enter 'Observation Mode'
-        // and trigger AI on EVERY move until the risk is resolved.
-        const isHighRisk = currentData.aiResponse?.risk_level === 'HIGH';
-        const isCheckpoint = (state.index % state.checkpointStep === 0) || (state.index === state.path.length - 1) || isHighRisk;
-        
-        // --- LOGIC UPGRADE: Nearest Landmark Detection ---
-        // Find the closest landmark for human-readable updates
-        let currentPlace = "En route";
-        if (state.landmarks.length > 0) {
-          // Simplification: pick the landmark that corresponds to the current step
-          // Since landmarks are extracted from steps, we can find the one with the smallest distance
-          let minDist = Infinity;
-          state.landmarks.forEach(lm => {
-            const d = Math.abs(lm.lat - lat) + Math.abs(lm.lng - lng);
-            if (d < minDist) {
-              minDist = d;
-              currentPlace = lm.name;
-            }
-          });
-        }
-
-        if (isHighRisk) {
-          console.log(`⚠️ [SIMULATOR] ${shipment_id} in HIGH RISK zone. Entering Full Observation Mode.`);
-        }
-
-        // --- LOGIC UPGRADE: Dynamic Path Switching ---
-        // Every 3 moves (15s), check if the user applied a new route
-        if (state.index % 3 === 0) {
-          if (currentData.status === 'ROUTE_APPLIED' && currentData.aiResponse?.all_routes) {
-            const bestRoute = currentData.aiResponse.all_routes.find(r => r.is_recommended);
-            if (bestRoute && bestRoute.summary !== route.summary) {
-              console.log(`🚀 [SIMULATOR] ${shipment_id} switching to OPTIMIZED path: ${bestRoute.summary}`);
-              state.path = bestRoute.path || state.path;
-            }
-          }
-        }
-        
-        const updateUrl = `${baseUrl}/update-location`;
-        const payload = { 
-          shipment_id, 
-          lat, 
-          lng,
-          current_place: currentPlace, // New: Send landmark name
-          trigger_ai: isCheckpoint 
-        };
-        
-        // Call the Gateway's own endpoint so the logic remains centralized (PubSub, AI, etc.)
-        await axios.post(updateUrl, payload, { 
-          headers: getSimHeaders(idempotencyKey),
-          timeout: 3000 
-        });
-
-        state.index++;
-      } catch (err) {
-        console.error(`[SIMULATOR ERROR] ${shipment_id} move failed:`, err.message);
-      }
-    }, 5000);
 
     activeSimulations.set(shipment_id, state);
 
-    res.json({ 
-      success: true, 
-      message: `Simulation engine active for ${shipment_id}`,
-      total_points: route.path.length,
-      origin,
-      destination
+    // 4. TRIGGER RECURSIVE LOOP
+    runSimulationStep(shipment_id);
+
+    res.json({
+      success: true,
+      message: `Dynamic simulation active for ${shipment_id}`,
+      points: route.path.length
     });
 
   } catch (err) {
-    console.error(`[SIMULATOR START ERROR] ${err.message}`);
+    console.error(`[SIMULATOR FATAL] ${err.message}`);
     res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+/**
+ * Core Logic: Processes one 'move' and schedules the next.
+ */
+const runSimulationStep = async (shipmentId) => {
+  const state = activeSimulations.get(shipmentId);
+
+  // Guard: Stop immediately if killed or missing
+  if (!state || !state.isActive) return;
+
+  // Destination reached
+  if (state.index >= state.path.length) {
+    console.log(`🏁 [SIMULATOR] ${shipmentId} arrived.`);
+    stopSimulationLogic(shipmentId);
+    return;
+  }
+
+  const baseUrl = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+  const point = state.path[state.index];
+  const lat = point.lat || point[0];
+  const lng = point.lng || point[1];
+
+  try {
+    const idempotencyKey = `sim-${shipmentId}-${state.index}`;
+
+    // Sync with Firestore for Dynamic Path Switching / Risk Alerts
+    const doc = await db().collection('shipments').doc(shipmentId).get();
+    const currentData = doc.data() || {};
+
+    // A. RISK-AWARE TRIGGERING (Overwrites cost-saving if high risk)
+    const isHighRisk = currentData.aiResponse?.risk_level === 'HIGH';
+    const isCheckpoint = (state.index % state.checkpointStep === 0) || (state.index === state.path.length - 1) || isHighRisk;
+
+    // B. DYNAMIC LANDMARK DETECTION
+    let currentPlace = "En route";
+    if (state.landmarks.length > 0) {
+      let minDist = Infinity;
+      state.landmarks.forEach(lm => {
+        const d = Math.abs(lm.lat - lat) + Math.abs(lm.lng - lng);
+        if (d < minDist) { minDist = d; currentPlace = lm.name; }
+      });
+    }
+
+    // C. DYNAMIC PATH SWITCHING (If user applied optimization mid-trip)
+    if (state.index % 3 === 0 && currentData.status === 'ROUTE_APPLIED') {
+      const bestRoute = currentData.aiResponse?.all_routes?.find(r => r.is_recommended);
+      if (bestRoute && bestRoute.summary !== currentData.summary) {
+        console.log(`🚀 [SIMULATOR] ${shipmentId} switching to optimized route: ${bestRoute.summary}`);
+        state.path = bestRoute.path || state.path;
+      }
+    }
+
+    // D. PUSH TELEMETRY
+    await axios.post(`${baseUrl}/update-location`, {
+      shipment_id: shipmentId,
+      lat, lng,
+      current_place: currentPlace,
+      trigger_ai: isCheckpoint
+    }, {
+      headers: getSimHeaders(idempotencyKey),
+      timeout: 4000
+    });
+
+    state.index++;
+
+  } catch (err) {
+    console.error(`[SIMULATOR STEP ERROR] ${shipmentId}:`, err.message);
+  }
+
+  // SCHEDULE NEXT STEP (Recursive Timeout prevents overlapping intervals)
+  if (state.isActive) {
+    state.timeoutId = setTimeout(() => runSimulationStep(shipmentId), 5000);
   }
 };
 
 const stopSimulator = (req, res) => {
   const { shipment_id } = req.body;
   if (!shipment_id) {
-    // If no ID provided, stop ALL (panic button)
     const count = activeSimulations.size;
     activeSimulations.forEach((_, id) => stopSimulationLogic(id));
-    return res.json({ success: true, message: `Stopped all ${count} active simulations` });
+    return res.json({ success: true, message: `Stopped all (${count}) simulations` });
   }
 
   if (stopSimulationLogic(shipment_id)) {
-    res.json({ success: true, message: `Simulation stopped for ${shipment_id}` });
+    res.json({ success: true, message: `Stopped simulation for ${shipment_id}` });
   } else {
-    res.status(404).json({ success: false, message: "No active simulation found for this shipment ID" });
+    res.status(404).json({ success: false, message: "No active simulation found" });
   }
 };
 
 const stopSimulationLogic = (shipmentId) => {
   const state = activeSimulations.get(shipmentId);
   if (state) {
-    if (state.interval) clearInterval(state.interval);
+    state.isActive = false;
+    if (state.timeoutId) clearTimeout(state.timeoutId);
     activeSimulations.delete(shipmentId);
-    console.log(`🛑 [SIMULATOR] Cleaned up state for ${shipmentId}`);
+    console.log(`🛑 [SIMULATOR] Terminated: ${shipmentId}`);
     return true;
   }
   return false;

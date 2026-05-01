@@ -182,6 +182,21 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  Future<void> stopAllSimulations() async {
+    isSimulating = false;
+    simulatingShipmentId = null;
+    notifyListeners();
+    try {
+      // Calling without an ID triggers the 'Stop All' logic in the backend
+      await _apiService.stopBackendSimulator();
+      successMessage = 'All active simulations have been terminated.';
+    } catch (e) {
+      errorMessage = 'Failed to stop all services.';
+    } finally {
+      notifyListeners();
+    }
+  }
+
   Future<void> stopLiveSimulation() async {
     final id = simulatingShipmentId;
     isSimulating = false;

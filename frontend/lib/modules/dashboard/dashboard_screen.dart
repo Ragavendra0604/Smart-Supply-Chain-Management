@@ -16,6 +16,11 @@ class DashboardScreen extends StatelessWidget {
         title: const Text('Supply Chain Overview'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.power_settings_new, color: AppTheme.danger),
+            tooltip: 'Stop All Services',
+            onPressed: () => _showStopAllDialog(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_none),
             onPressed: () {},
           ),
@@ -39,54 +44,18 @@ class DashboardScreen extends StatelessWidget {
                 _SummaryStats(shipments: controller.recentShipments),
                 if (controller.errorMessage != null) ...[
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.danger.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.danger, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            controller.errorMessage!,
-                            style: const TextStyle(color: AppTheme.danger, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 16, color: AppTheme.danger),
-                          onPressed: () => controller.errorMessage = null,
-                        ),
-                      ],
-                    ),
+                  _NotificationBar(
+                    message: controller.errorMessage!,
+                    color: AppTheme.danger,
+                    onClose: () => controller.errorMessage = null,
                   ),
                 ],
                 if (controller.successMessage != null) ...[
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.success.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle_outline, color: AppTheme.success, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            controller.successMessage!,
-                            style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, size: 16, color: AppTheme.success),
-                          onPressed: () => controller.successMessage = null,
-                        ),
-                      ],
-                    ),
+                  _NotificationBar(
+                    message: controller.successMessage!,
+                    color: AppTheme.success,
+                    onClose: () => controller.successMessage = null,
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -111,6 +80,71 @@ class DashboardScreen extends StatelessWidget {
       ),
     );
   }
+
+  void _showStopAllDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Stop All Services?'),
+        content: const Text(
+            'This will immediately terminate all active vehicle simulations across the entire system. This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.danger),
+            onPressed: () {
+              context.read<DashboardController>().stopAllSimulations();
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('Stop Everything',
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationBar extends StatelessWidget {
+  final String message;
+  final Color color;
+  final VoidCallback onClose;
+
+  const _NotificationBar({
+    required this.message,
+    required this.color,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: color, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close, size: 16, color: color),
+            onPressed: onClose,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _SummaryStats extends StatelessWidget {
@@ -120,7 +154,9 @@ class _SummaryStats extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final atRisk = shipments.where((s) => s.ai.riskLevel == 'HIGH').length;
-    final inTransit = shipments.where((s) => s.status == 'IN_TRANSIT' || s.status == 'ANALYZED').length;
+    final inTransit = shipments
+        .where((s) => s.status == 'IN_TRANSIT' || s.status == 'ANALYZED')
+        .length;
 
     return Row(
       children: [
@@ -205,8 +241,8 @@ class _ShipmentCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           context.read<DashboardController>().selectShipment(
-            shipment.shipmentId,
-          );
+                shipment.shipmentId,
+              );
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -269,55 +305,63 @@ class _ShipmentCard extends StatelessWidget {
               const SizedBox(height: 12),
               const Divider(),
               const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      MetricChip(
-                        label: 'Delay',
-                        value: shipment.ai.delayPrediction,
-                        icon: Icons.timer,
-                      ),
-                      const Spacer(),
-                      Consumer<DashboardController>(
-                        builder: (context, controller, _) {
-                          final isSimulatingThis = controller.isSimulating && 
-                                                 controller.simulatingShipmentId == shipment.shipmentId;
-                          
-                          return ElevatedButton.icon(
-                            onPressed: () {
-                              controller.toggleSimulation(shipment);
-                              final isStarting = !isSimulatingThis;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(isStarting 
-                                    ? '🚀 Simulation started for ${shipment.shipmentId}' 
-                                    : '🛑 Simulation stopped'),
-                                  duration: const Duration(seconds: 2),
-                                  behavior: SnackBarBehavior.floating,
-                                  backgroundColor: isStarting ? AppTheme.primary : AppTheme.danger,
-                                ),
-                              );
-                            },
-                            icon: Icon(
-                              isSimulatingThis ? Icons.stop_circle : Icons.play_arrow_rounded,
-                              size: 18,
-                            ),
-                            label: Text(isSimulatingThis ? 'Stop' : 'Simulate'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isSimulatingThis 
-                                  ? AppTheme.danger.withValues(alpha: 0.1)
-                                  : AppTheme.primary.withValues(alpha: 0.1),
-                              foregroundColor: isSimulatingThis ? AppTheme.danger : AppTheme.primary,
-                              elevation: 0,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+              Row(
+                children: [
+                  MetricChip(
+                    label: 'Delay',
+                    value: shipment.ai.delayPrediction,
+                    icon: Icons.timer,
+                  ),
+                  const Spacer(),
+                  Consumer<DashboardController>(
+                    builder: (context, controller, _) {
+                      final isSimulatingThis = controller.isSimulating &&
+                          controller.simulatingShipmentId ==
+                              shipment.shipmentId;
+
+                      return ElevatedButton.icon(
+                        onPressed: () {
+                          controller.toggleSimulation(shipment);
+                          final isStarting = !isSimulatingThis;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isStarting
+                                  ? '🚀 Simulation started for ${shipment.shipmentId}'
+                                  : '🛑 Simulation stopped'),
+                              duration: const Duration(seconds: 2),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: isStarting
+                                  ? AppTheme.primary
+                                  : AppTheme.danger,
                             ),
                           );
                         },
-                      ),
-                    ],
+                        icon: Icon(
+                          isSimulatingThis
+                              ? Icons.stop_circle
+                              : Icons.play_arrow_rounded,
+                          size: 18,
+                        ),
+                        label: Text(isSimulatingThis ? 'Stop' : 'Simulate'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isSimulatingThis
+                              ? AppTheme.danger.withValues(alpha: 0.1)
+                              : AppTheme.primary.withValues(alpha: 0.1),
+                          foregroundColor: isSimulatingThis
+                              ? AppTheme.danger
+                              : AppTheme.primary,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 0),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      );
+                    },
                   ),
+                ],
+              ),
             ],
           ),
         ),
