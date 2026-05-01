@@ -43,7 +43,11 @@ class _DashboardMapState extends State<DashboardMap> {
   @override
   void didUpdateWidget(covariant DashboardMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _syncCamera();
+    // Force fit bounds if the shipment ID changed or if we just got a path
+    final pathChanged = widget.shipment.route.path.length != oldWidget.shipment.route.path.length;
+    final idChanged = widget.shipment.shipmentId != oldWidget.shipment.shipmentId;
+    
+    _syncCamera(forceFit: idChanged || pathChanged);
   }
 
   @override
@@ -58,14 +62,14 @@ class _DashboardMapState extends State<DashboardMap> {
         _syncCamera(forceFit: true);
       },
       myLocationButtonEnabled: false,
-      zoomControlsEnabled: false,
-      compassEnabled: false,
-      mapToolbarEnabled: false,
+      zoomControlsEnabled: true, // Enabled for better UX
+      compassEnabled: true,
+      mapToolbarEnabled: true,
       trafficEnabled: true,
       polylines: {
         if (path.length > 1)
           Polyline(
-            polylineId: const PolylineId('shipment_route'),
+            polylineId: PolylineId('route_${widget.shipment.shipmentId}'),
             points: path,
             width: 6,
             color: const Color(0xFF2563EB),
@@ -99,15 +103,11 @@ class _DashboardMapState extends State<DashboardMap> {
         icon: _truckIcon ?? BitmapDescriptor.defaultMarkerWithHue(
           riskMarkerHue(widget.shipment.riskLevel),
         ),
-        infoWindow: const InfoWindow(title: 'Live vehicle'),
+        infoWindow: InfoWindow(
+          title: 'Shipment ${widget.shipment.shipmentId}',
+          snippet: widget.shipment.currentPlace,
+        ),
         zIndexInt: 2,
-      ),
-      Marker(
-        markerId: const MarkerId('current_pin'),
-        position: current,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-        infoWindow: InfoWindow(title: widget.shipment.currentPlace),
-        visible: false, // Hide the duplicate pin now that we have a truck
       ),
     };
 
@@ -117,7 +117,7 @@ class _DashboardMapState extends State<DashboardMap> {
           markerId: const MarkerId('origin'),
           position: path.first,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-          infoWindow: InfoWindow(title: widget.shipment.origin),
+          infoWindow: InfoWindow(title: 'Origin: ${widget.shipment.origin}'),
         ),
       );
 
@@ -126,7 +126,7 @@ class _DashboardMapState extends State<DashboardMap> {
           markerId: const MarkerId('destination'),
           position: path.last,
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          infoWindow: InfoWindow(title: widget.shipment.destination),
+          infoWindow: InfoWindow(title: 'Destination: ${widget.shipment.destination}'),
         ),
       );
     }
@@ -141,7 +141,7 @@ class _DashboardMapState extends State<DashboardMap> {
     final path = widget.shipment.route.path;
     final current = MapUtils.fallbackCenter(path, widget.shipment.currentLocation);
     final viewportKey =
-        '${widget.shipment.shipmentId}:${current.latitude}:${current.longitude}:${path.length}:${path.isNotEmpty ? path.first.latitude : 0}:${path.isNotEmpty ? path.last.longitude : 0}';
+        '${widget.shipment.shipmentId}:${current.latitude}:${current.longitude}:${path.length}';
 
     if (!forceFit && viewportKey == _lastViewportKey) {
       return;
@@ -150,10 +150,14 @@ class _DashboardMapState extends State<DashboardMap> {
     _lastViewportKey = viewportKey;
 
     if (path.length > 1 && forceFit) {
-      controller.animateCamera(
-        CameraUpdate.newLatLngBounds(MapUtils.boundsFor(path), 70),
-      );
-      return;
+      try {
+        controller.animateCamera(
+          CameraUpdate.newLatLngBounds(MapUtils.boundsFor(path), 70),
+        );
+        return;
+      } catch (e) {
+        debugPrint('Error fitting bounds: $e');
+      }
     }
 
     controller.animateCamera(CameraUpdate.newLatLng(current));

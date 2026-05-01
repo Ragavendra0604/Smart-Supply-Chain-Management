@@ -257,7 +257,13 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
       created_at: new Date()
     });
 
-    res.json({ success: true });
+    // --- TRIGGER ANALYSIS ON CREATION ---
+    // Decoupled call to the analysis pipeline to ensure the user gets immediate intelligence
+    import('./controllers/shipmentController.js').then(m => {
+      m.default.runAsyncAnalysis(shipment_id);
+    });
+
+    res.json({ success: true, shipment_id });
 
   } catch (err) {
     res.status(500).json({ error: err.message });

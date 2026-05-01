@@ -1,15 +1,19 @@
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
 
+/**
+ * PRODUCTION MAPS SERVICE
+ * Fetches real-world route data using Google Maps Directions API.
+ * No hardcoded fallbacks for specific cities.
+ */
 const getRoute = async (origin, destination) => {
+  const url = `https://maps.googleapis.com/maps/api/directions/json`;
+
+  if (!process.env.GOOGLE_MAPS_API_KEY) {
+    throw new Error('GOOGLE_MAPS_API_KEY is not configured in the environment.');
+  }
+
   try {
-    const url = `https://maps.googleapis.com/maps/api/directions/json`;
-
-    if (!process.env.GOOGLE_MAPS_API_KEY) {
-      console.error('GOOGLE_MAPS_API_KEY not configured');
-      return getDefaultRoute(origin, destination);
-    }
-
     const response = await axios.get(url, {
       params: {
         origin,
@@ -20,22 +24,19 @@ const getRoute = async (origin, destination) => {
       }
     });
 
-    // Check API error status
     if (response.data.status !== 'OK') {
-      console.error(`Maps API status: ${response.data.status}`, response.data.error_message);
-      return getDefaultRoute(origin, destination);
+      const errorMsg = response.data.error_message || response.data.status;
+      throw new Error(`Google Maps API Error: ${errorMsg}`);
     }
 
     if (!response.data.routes || response.data.routes.length === 0) {
-      console.warn(`No routes found between ${origin} and ${destination}`);
-      return getDefaultRoute(origin, destination);
+      throw new Error(`No routes found between "${origin}" and "${destination}". Please check the addresses.`);
     }
 
     return response.data.routes.map((route, index) => {
       const leg = route.legs[0];
       
-      // --- LOGIC UPGRADE: Landmark Extraction ---
-      // We extract town names and junctions from the HTML instructions
+      // Extract landmarks from instructions for high-fidelity simulation
       const landmarks = leg.steps.map(step => {
         const cleanName = step.html_instructions.replace(/<[^>]*>?/gm, '');
         return {
@@ -47,7 +48,7 @@ const getRoute = async (origin, destination) => {
 
       return {
         route_id: `route_${index}`,
-        summary: route.summary,
+        summary: route.summary || `Route via ${leg.steps[0]?.html_instructions.replace(/<[^>]*>?/gm, '').split(' ')[0] || 'Main Road'}`,
         distance: leg.distance.text,
         distance_meters: leg.distance.value,
         duration: leg.duration.text,
@@ -59,63 +60,13 @@ const getRoute = async (origin, destination) => {
           lat,
           lng
         })),
+        source: 'google_maps_api'
       };
     });
   } catch (error) {
-    console.error('Maps API error:', error.message);
-    return getDefaultRoute(origin, destination);
+    console.error(`[MAPS SERVICE] ${error.message}`);
+    throw error; // Rethrow to let the controller handle it
   }
-};
-
-// Fallback route generator
-// const getDefaultRoute = (origin, destination) => {
-//   Calculate approximate distance based on location names (fallback)
-//   const distances = {
-//     'Chennai-Bangalore': { distance_meters: 350000, duration_seconds: 18000 },
-//     'Mumbai-Delhi': { distance_meters: 1450000, duration_seconds: 68400 },
-//     'Bangalore-Hyderabad': { distance_meters: 565000, duration_seconds: 29400 },
-//     'Chennai-Hyderabad': { distance_meters: 620000, duration_seconds: 32400 },
-//   };
-
-//   const key = `${origin}-${destination}`;
-//   const distanceData = distances[key] || {
-//     distance_meters: 500000 + Math.random() * 500000,
-//     duration_seconds: 25200 + Math.random() * 25200
-//   };
-
-//   return [{
-//     route_id: 'route_0',
-//     summary: `${origin} to ${destination}`,
-const getDefaultRoute = (origin, destination) => {
-  // Calculate approximate distance based on location names (fallback)
-  const distances = {
-    'Chennai-Bangalore': { distance_meters: 350000, duration_seconds: 18000 },
-    'Mumbai-Delhi': { distance_meters: 1450000, duration_seconds: 68400 },
-    'Bangalore-Hyderabad': { distance_meters: 565000, duration_seconds: 29400 },
-    'Chennai-Hyderabad': { distance_meters: 620000, duration_seconds: 32400 },
-  };
-
-  const key = `${origin}-${destination}`;
-  const distanceData = distances[key] || {
-    distance_meters: 500000 + Math.random() * 500000,
-    duration_seconds: 25200 + Math.random() * 25200
-  };
-
-  return [{
-    route_id: 'route_0',
-    summary: `${origin} to ${destination}`,
-    distance: `${Math.round(distanceData.distance_meters / 1000)} km`,
-    distance_meters: distanceData.distance_meters,
-    duration: `${Math.round(distanceData.duration_seconds / 3600)} hours`,
-    duration_seconds: distanceData.duration_seconds,
-    traffic_duration: `${Math.round(distanceData.duration_seconds / 3600)} hours`,
-    traffic_duration_seconds: distanceData.duration_seconds,
-    path: [
-      { lat: 13.0827, lng: 80.2707 }, // Mock Chennai
-      { lat: 12.9716, lng: 77.5946 }  // Mock Bangalore
-    ],
-    source: 'fallback'
-  }];
 };
 
 export default { getRoute };

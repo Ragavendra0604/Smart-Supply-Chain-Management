@@ -299,7 +299,7 @@ def generate_logistics_insight(prediction: float, data: InputData) -> str:
             """
         
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt
         )
         return response.text.strip()

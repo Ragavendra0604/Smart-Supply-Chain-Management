@@ -28,8 +28,12 @@ const performAnalysis = async (shipment_id) => {
     const vessel = await seaService.getVesselStatus(shipment.carrier_id || 'SE101');
     logisticsData.routes = [{ summary: 'Ocean Lane', duration_seconds: 86400 * 5, distance_meters: 5000000, mode: 'SEA' }];
   } else {
-    // Default ROAD
-    logisticsData.routes = await mapsService.getRoute(shipment.origin, shipment.destination).catch(() => []);
+    // Default ROAD: Reuse existing route data if already present to save API costs
+    if (shipment.routeData && shipment.routeData.length > 0) {
+      logisticsData.routes = shipment.routeData;
+    } else {
+      logisticsData.routes = await mapsService.getRoute(shipment.origin, shipment.destination).catch(() => []);
+    }
   }
 
   // 2. FETCH ENVIRONMENTAL CONTEXT
