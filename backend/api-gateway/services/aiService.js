@@ -13,13 +13,16 @@ const getPrediction = async (data) => {
       : `${aiBaseUrl}/predict`;
 
     // Production-Grade: Fetch ID Token for Service-to-Service Auth
-    // This allows calling Cloud Run services that have --no-allow-unauthenticated
+    // Use the base URL (origin) as the audience to ensure Cloud Run accepts the token.
     let authHeaders = {};
     try {
-      const client = await auth.getIdTokenClient(aiBaseUrl);
+      const audience = new URL(aiBaseUrl).origin;
+      const client = await auth.getIdTokenClient(audience);
       authHeaders = await client.getRequestHeaders();
     } catch (authError) {
-      console.warn('Unable to fetch ID Token (likely local dev):', authError.message);
+      console.warn(`[AI AUTH WARNING] Failed to fetch ID Token for audience ${aiBaseUrl}: ${authError.message}`);
+      // In local development, we might not have a service account, so we proceed without headers
+      // In production (Cloud Run), this indicates a configuration or permission issue.
     }
 
     const response = await axios.post(
