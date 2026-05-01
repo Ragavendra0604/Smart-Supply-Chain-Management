@@ -409,13 +409,28 @@ async def process_ai_analysis(shipment_id: str):
             "predicted_delay_mins": predicted_delay_mins,
             "is_recommended": False
         })
-        
-        if risk_score < min_score:
-            min_score = risk_score
-            best_route_index = i
 
-    # Mark the best route
+    # --- LOGIC UPGRADE: Multi-Objective Ranking ---
+    # We rank routes based on a Composite Score: 40% Time, 40% Cost, 20% Risk.
     if processed_routes:
+        # Find max values for normalization to avoid bias
+        max_time = max(r["travel_time_min"] for r in processed_routes) or 1
+        max_cost = max(r["total_cost"] for r in processed_routes) or 1
+        
+        best_score = float('inf')
+        for i, r in enumerate(processed_routes):
+            # Lower is better
+            time_factor = r["travel_time_min"] / max_time
+            cost_factor = r["total_cost"] / max_cost
+            risk_factor = r["risk_score"] # already 0-1
+            
+            composite_score = (time_factor * 0.4) + (cost_factor * 0.4) + (risk_factor * 0.2)
+            
+            if composite_score < best_score:
+                best_score = composite_score
+                best_route_index = i
+
+        # Mark the best route
         processed_routes[best_route_index]["is_recommended"] = True
         
     # 4. Extract Before/After for Comparison (comparing first route vs recommended)

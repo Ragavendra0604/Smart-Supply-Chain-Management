@@ -52,6 +52,7 @@ const startSimulator = async (req, res) => {
     
     const state = {
       path: route.path,
+      landmarks: route.landmarks || [], // New: Store landmarks
       index: 0,
       shipment_id,
       checkpointStep,
@@ -82,6 +83,22 @@ const startSimulator = async (req, res) => {
         const isHighRisk = currentData.aiResponse?.risk_level === 'HIGH';
         const isCheckpoint = (state.index % state.checkpointStep === 0) || (state.index === state.path.length - 1) || isHighRisk;
         
+        // --- LOGIC UPGRADE: Nearest Landmark Detection ---
+        // Find the closest landmark for human-readable updates
+        let currentPlace = "En route";
+        if (state.landmarks.length > 0) {
+          // Simplification: pick the landmark that corresponds to the current step
+          // Since landmarks are extracted from steps, we can find the one with the smallest distance
+          let minDist = Infinity;
+          state.landmarks.forEach(lm => {
+            const d = Math.abs(lm.lat - lat) + Math.abs(lm.lng - lng);
+            if (d < minDist) {
+              minDist = d;
+              currentPlace = lm.name;
+            }
+          });
+        }
+
         if (isHighRisk) {
           console.log(`⚠️ [SIMULATOR] ${shipment_id} in HIGH RISK zone. Entering Full Observation Mode.`);
         }
@@ -103,6 +120,7 @@ const startSimulator = async (req, res) => {
           shipment_id, 
           lat, 
           lng,
+          current_place: currentPlace, // New: Send landmark name
           trigger_ai: isCheckpoint 
         };
         

@@ -33,6 +33,17 @@ const getRoute = async (origin, destination) => {
 
     return response.data.routes.map((route, index) => {
       const leg = route.legs[0];
+      
+      // --- LOGIC UPGRADE: Landmark Extraction ---
+      // We extract town names and junctions from the HTML instructions
+      const landmarks = leg.steps.map(step => {
+        const cleanName = step.html_instructions.replace(/<[^>]*>?/gm, '');
+        return {
+          name: cleanName,
+          lat: step.start_location.lat,
+          lng: step.start_location.lng
+        };
+      });
 
       return {
         route_id: `route_${index}`,
@@ -43,6 +54,7 @@ const getRoute = async (origin, destination) => {
         duration_seconds: leg.duration.value,
         traffic_duration: leg.duration_in_traffic?.text || leg.duration.text,
         traffic_duration_seconds: leg.duration_in_traffic?.value || leg.duration.value,
+        landmarks: landmarks,
         path: polyline.decode(route.overview_polyline.points).map(([lat, lng]) => ({
           lat,
           lng

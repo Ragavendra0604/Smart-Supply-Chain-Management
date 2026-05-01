@@ -260,12 +260,13 @@ app.post('/update-location', authMiddleware, async (req, res) => {
     if (!idempotencyKey) {
       return res.status(400).json({ error: 'x-idempotency-key header required' });
     }
-    const { shipment_id, lat, lng, trigger_ai = true } = req.body;
+    const { shipment_id, lat, lng, trigger_ai = true, current_place = "" } = req.body;
     const result = await processIdempotentRequest(idempotencyKey, async () => {
       // 1. Fast path: update location in Firestore instantly
       const shipmentRef = db().collection('shipments').doc(shipment_id);
       await shipmentRef.update({
         current_location: { lat, lng },
+        current_place: current_place || "En route",
         status: 'IN_TRANSIT',
         updated_at: new Date()
       });
