@@ -259,6 +259,7 @@ ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5000
 MAPS_API_KEY=your-google-maps-api-key
 WEATHER_API_KEY=your-weather-api-key
 NEWS_API_KEY=your-news-api-key
+SIMULATOR_SECRET=your-secure-simulator-key
 ```
 
 Start the gateway:
