@@ -31,63 +31,36 @@ class InputData(BaseModel):
     speed_modifier: Optional[float] = 1.0
     model_name: Optional[str] = "gemini-2.5-flash"
 
-def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD") -> float:
-    ml_model = get_ml_model()
-    if ml_model is None:
-        return 0.0
+def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD", 
+                             traffic_level: float = 1.0, speed_modifier: float = 1.0) -> float:
+    # ml_model = get_ml_model()
+    # if ml_model is None:
+    #     return 0.0
         
     try:
-        dist_km = 0.0
-        raw_dist = route.get("distance_meters")
-        if raw_dist is not None:
-            dist_km = float(raw_dist) / 1000.0
-        else:
-            dist_str = str(route.get("distance", "0")).split()[0].replace(",", "")
-            dist_km = float(dist_str) if dist_str else 0.0
-        
+        # ML DISABLED: Moving intelligence to Gemini AI as requested
+        # Using a base heuristic for the 'Risk Engine' math while AI generates reasoning
         base_dur = route.get("duration_seconds") or 1
         traffic_dur = route.get("traffic_duration_seconds") or base_dur
-        traffic_index = min(max((traffic_dur / base_dur) * 1.5, 1.0), 5.0)
         
+        # Calculate heuristic delay based on What-If sliders
+        traffic_impact = (base_dur / 60) * (traffic_level - 1.0)
+        speed_impact = (base_dur / 60) * (1.0 - speed_modifier)
+        
+        weather_impact = 0
         cond = (weather.get("condition") or "clear").lower()
-        severity = 0.0
-        if any(x in cond for x in ["storm", "tornado"]): severity = 9.0
-        elif "snow" in cond: severity = 7.0
-        elif "rain" in cond: severity = 3.0
-        elif "cloud" in cond: severity = 1.0
+        if "storm" in cond: weather_impact = 45
+        elif "rain" in cond: weather_impact = 15
         
-        now = datetime.now()
-        hr = now.hour
-        dow = now.weekday()
-        hr_sin = np.sin(2 * np.pi * hr / 24)
-        hr_cos = np.cos(2 * np.pi * hr / 24)
-        is_holiday = 1 if dow >= 5 else 0
+        prediction = traffic_impact + speed_impact + weather_impact
         
-        # Features MUST be in this exact order to match the trained XGBoost model
-        features = pd.DataFrame([[
-            traffic_index,
-            severity,
-            dist_km,
-            hr,
-            dow
-        ]], columns=[
-            'traffic_level',
-            'weather_condition',
-            'distance_km',
-            'time_of_day',
-            'day_of_week'
-        ])
-
-        features = features[['traffic_level', 'weather_condition', 'distance_km', 'time_of_day', 'day_of_week']]
-        
-        prediction = ml_model.predict(features)[0]
         mode_upper = mode.upper()
         if mode_upper == "AIR": prediction *= 0.4
         elif mode_upper == "SEA": prediction *= 2.5
             
         return round(float(prediction), 2)
     except Exception as e:
-        logger.error(f"ML Prediction Error: {e}")
+        logger.error(f"Heuristic Fallback Error: {e}")
         return 0.0
 
 def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD", 
@@ -122,8 +95,8 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
         total_cost = round(dist_km * COST_PER_KM, 2)
         total_fuel = round(dist_km * FUEL_PER_KM, 1)
         
-        # Base delay from ML model
-        predicted_delay_mins = get_ml_delay_prediction(route, weather, mode)
+        # Base delay from 'Smart Heuristic' (ML is currently commented out)
+        predicted_delay_mins = get_ml_delay_prediction(route, weather, mode, traffic_level, speed_modifier)
         
         # --- OVERRIDE INJECTION ---
         # Apply the tactical traffic level (What-if slider)
@@ -235,12 +208,13 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
         weather_condition = weather.get("condition") or "Clear"
         
         prompt = f"""
-            ROLE: Deterministic Logistics Decision Engine (Strict Execution Mode)
+            ROLE: Strategic AI Logistics Advisor (Primary Intelligence Mode)
 
             SYSTEM:
-            You are NOT a conversational AI.
-            You are a rule-based logistics decision engine.
-            You MUST follow rules exactly and return ONLY valid JSON.
+            You are the primary intelligence layer for this supply chain.
+            The ML model is in observation mode; YOU are responsible for synthesizing 
+            environmental data, vehicle telemetry, and tactical overrides into 
+            operational decisions.
 
             ---
 
