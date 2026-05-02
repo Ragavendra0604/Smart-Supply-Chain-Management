@@ -4,6 +4,7 @@ import '../../controllers/dashboard_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/shipment.dart';
 import '../../widgets/info_card.dart';
+import '../../widgets/metric_chip.dart';
 
 class OptimizationScreen extends StatelessWidget {
   const OptimizationScreen({required this.shipment, super.key});
@@ -85,6 +86,14 @@ class _Header extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (shipment.speedKmH > 0) ...[
+              const Spacer(),
+              MetricChip(
+                label: 'Current Speed',
+                value: '${shipment.speedKmH.toStringAsFixed(0)} km/h',
+                icon: Icons.speed,
+              ),
+            ],
           ],
         ),
       ],

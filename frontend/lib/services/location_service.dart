@@ -10,11 +10,13 @@ class LocationService {
   Future<void> sendVehicleLocation({
     required String shipmentId,
     required LatLng point,
+    double speedKmH = 0,
   }) {
     return _apiService.updateLocation(
       shipmentId: shipmentId,
       lat: point.latitude,
       lng: point.longitude,
+      speedKmH: speedKmH,
     );
   }
 }

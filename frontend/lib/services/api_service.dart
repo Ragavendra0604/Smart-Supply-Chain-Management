@@ -106,6 +106,7 @@ class ApiService {
     required String shipmentId,
     required double lat,
     required double lng,
+    double speedKmH = 0,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/update-location');
     // final response = await _client.post(
@@ -120,6 +121,7 @@ class ApiService {
           'shipment_id': shipmentId,
           'lat': lat,
           'lng': lng,
+          'speed_kmh': speedKmH,
         }),
       );
 

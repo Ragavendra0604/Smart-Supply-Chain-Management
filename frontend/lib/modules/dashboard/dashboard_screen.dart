@@ -16,10 +16,21 @@ class DashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Supply Chain Overview'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.power_settings_new, color: AppTheme.danger),
-            tooltip: 'Stop All Services',
-            onPressed: () => _showStopAllDialog(context),
+          Consumer<DashboardController>(
+            builder: (context, controller, _) => IconButton(
+              icon: Icon(
+                controller.isGlobalStopped ? Icons.play_circle_outline : Icons.power_settings_new,
+                color: controller.isGlobalStopped ? AppTheme.success : AppTheme.danger,
+              ),
+              tooltip: controller.isGlobalStopped ? 'Resume All Services' : 'Stop All Services',
+              onPressed: () {
+                if (controller.isGlobalStopped) {
+                  controller.toggleGlobalStop(false);
+                } else {
+                  _showStopAllDialog(context);
+                }
+              },
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.notifications_none),
@@ -43,11 +54,13 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 if (controller.isGlobalStopped) ...[
-                   _NotificationBar(
-                    message: 'SYSTEM HALTED: Global Stop Active',
-                    color: AppTheme.danger,
-                    onClose: () => controller.isGlobalStopped = false, // Allow local dismissal for testing
-                  ),
+                    _NotificationBar(
+                      message: 'SYSTEM HALTED: Global Stop Active',
+                      color: AppTheme.danger,
+                      actionLabel: 'RESUME',
+                      onAction: () => controller.toggleGlobalStop(false),
+                      onClose: () => controller.errorMessage = null,
+                    ),
                   const SizedBox(height: 16),
                 ],
                 _SummaryStats(shipments: controller.recentShipments),
@@ -133,12 +146,16 @@ class DashboardScreen extends StatelessWidget {
 class _NotificationBar extends StatelessWidget {
   final String message;
   final Color color;
+  final String? actionLabel;
+  final VoidCallback? onAction;
   final VoidCallback onClose;
 
   const _NotificationBar({
     required this.message,
     required this.color,
     required this.onClose,
+    this.actionLabel,
+    this.onAction,
   });
 
   @override
@@ -159,6 +176,24 @@ class _NotificationBar extends StatelessWidget {
               style: TextStyle(color: color, fontWeight: FontWeight.w600),
             ),
           ),
+          if (actionLabel != null && onAction != null) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: onAction,
+              style: TextButton.styleFrom(
+                foregroundColor: color,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: BorderSide(color: color),
+                ),
+              ),
+              child: Text(
+                actionLabel!,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
           IconButton(
             icon: Icon(Icons.close, size: 16, color: color),
             onPressed: onClose,
@@ -333,6 +368,12 @@ class _ShipmentCard extends StatelessWidget {
                     label: 'Delay',
                     value: shipment.ai.delayPrediction,
                     icon: Icons.timer,
+                  ),
+                  const SizedBox(width: 8),
+                  MetricChip(
+                    label: 'Speed',
+                    value: '${shipment.speedKmH.toStringAsFixed(0)} km/h',
+                    icon: Icons.speed,
                   ),
                   const Spacer(),
                   Consumer<DashboardController>(

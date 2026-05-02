@@ -17,6 +17,7 @@ class Shipment {
     required this.ai,
     required this.createdAt,
     required this.updatedAt,
+    this.speedKmH = 0,
   });
 
   final String id;
@@ -31,6 +32,7 @@ class Shipment {
   final ShipmentAiInsight ai;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  final double speedKmH;
 
   Shipment copyWith({
     String? id,
@@ -45,6 +47,7 @@ class Shipment {
     ShipmentAiInsight? ai,
     DateTime? createdAt,
     DateTime? updatedAt,
+    double? speedKmH,
   }) {
     return Shipment(
       id: id ?? this.id,
@@ -59,6 +62,7 @@ class Shipment {
       ai: ai ?? this.ai,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      speedKmH: speedKmH ?? this.speedKmH,
     );
   }
 
@@ -140,6 +144,7 @@ class Shipment {
       ai: ShipmentAiInsight.fromMap(mapValue(data['aiResponse'])),
       createdAt: dateTimeFromDynamic(data['created_at']),
       updatedAt: dateTimeFromDynamic(data['updated_at']),
+      speedKmH: numValue(data['speed_kmh']).toDouble(),
     );
   }
 }
