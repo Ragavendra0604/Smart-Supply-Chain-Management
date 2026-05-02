@@ -161,36 +161,69 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
         risk_level = "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH"
         
         prompt = f"""
-            System: Senior Logistics & Supply Chain Strategist.
-            
-            Task: Provide a high-value, deterministic tactical analysis for an active shipment.
-            
-            INPUT DATA:
-            - Shipment: {origin} to {dest} via {mode}
-            - Cargo: {data.cargo_type} (Priority: {data.priority}, Perishable: {data.is_perishable})
-            - Deadline: {data.delivery_deadline or 'Flexible'}
-            - Vehicle State: {data.fuel_level}% Fuel, Health Status: {data.vehicle_health}
-            - Risk Metrics: {risk_level} (Delay: {predicted_delay}, Score: {risk_score})
-            - Environmental: {weather.get('condition', 'Clear')} at {dest} ({weather.get('temperature', 'N/A')}°C)
-            - News Alerts: {json.dumps(news[:3])}
+            ROLE: Logistics Decision Engine (Deterministic)
 
-            REQUIREMENTS:
-            1. STRATEGIC REASONING: Connect the environmental risk to the specific Cargo/Deadline constraints.
-            2. COMPLIANCE: If a deadline is present, state if it is at risk of breach.
-            3. MISSION ACTION: Give a single, authoritative Go/No-Go or Reroute instruction.
-            4. TONE: Professional, concise, and deterministic. Focus on ROI, Safety, and Service Level Agreements (SLAs).
+            INPUT:
+            Route: {origin}->{dest} | Mode: {mode}
+            Cargo: {data.cargo_type}, Priority={data.priority}, Perishable={data.is_perishable}
+            Deadline: {data.delivery_deadline or 'Flexible'}
+            Fuel: {data.fuel_level}% | Health: {data.vehicle_health}
+            Delay: {predicted_delay} | Risk: {risk_score} ({risk_level})
+            Weather: {weather.get('condition','Clear')}, {weather.get('temperature','N/A')}°C
 
-            FORMAT:
-            - A concise STRATEGIC SUMMARY (2 sentences) connecting environmental risks to the cargo SLA.
-            - A deterministic TACTICAL INSTRUCTION (1 sentence) with a clear Go/No-Go or Reroute.
-            - Focus on impact to delivery ROI and safety.
+            RULES:
+            NO_GO if:
+            - Fuel <15 OR Health=CRITICAL OR (Risk>85 AND Priority=HIGH)
+
+            REROUTE if:
+            - 60<=Risk<=85 OR Weather in [Storm,Flood] OR (Delay>30 AND Deadline exists)
+
+            GO if:
+            - Risk<60 AND no above conditions
+
+            SLA_RISK:
+            - TRUE if delay breaches deadline buffer
+
+            OUTPUT (JSON ONLY):
+            {{
+            "decision":"GO|REROUTE|NO_GO",
+            "sla_risk":true/false,
+            "confidence":0-100,
+            "reason":"max 20 words",
+            "action":"one clear instruction"
+            }}
+
+            CONSTRAINTS:
+            - No extra text
+            - Deterministic output
+            - Safety > SLA > Cost
             """
             
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt
-        )
-        return response.text.strip()
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config={
+                    'response_mime_type': 'application/json',
+                }
+            )
+            
+            # Parse the structured JSON response
+            import json
+            res_data = json.loads(response.text.strip())
+            
+            # Format for the Premium Dashboard Insight
+            decision = res_data.get("decision", "GO")
+            reason = res_data.get("reason", "Conditions verified.")
+            action = res_data.get("action", "Proceed as planned.")
+            
+            # Create a professional, formatted string for the UI
+            icon = "✅" if decision == "GO" else "⚠️" if decision == "REROUTE" else "🛑"
+            return f"{icon} {decision}: {reason} Instruction: {action}"
+
+        except Exception as e:
+            print(f"AI Parsing Error: {e}")
+            return response.text.strip() if 'response' in locals() else "AI Insight currently unavailable."
 
     except Exception as e:
         logger.error(f"Gemini Insight Error: {e}")
