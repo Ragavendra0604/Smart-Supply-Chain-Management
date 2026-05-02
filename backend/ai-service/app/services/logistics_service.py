@@ -65,12 +65,10 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         
         features = pd.DataFrame([{
             'distance_km': dist_km,
-            'traffic_index': traffic_index,
-            'weather_severity': severity,
+            'traffic_level': traffic_index,
+            'weather_condition': severity,
             'day_of_week': dow,
-            'is_holiday': is_holiday,
-            'hour_sin': hr_sin,
-            'hour_cos': hr_cos
+            'time_of_day': hr
         }])
         
         prediction = ml_model.predict(features)[0]
@@ -225,7 +223,6 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
         origin = data.origin or "Current Location"
         dest = data.destination or "Destination"
         weather = data.weatherData or {}
-        weather_condition = weather.get("condition") or "Clear"
         
         prompt = f"""
             ROLE: Deterministic Logistics Decision Engine (Strict Execution Mode)
@@ -257,7 +254,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             Environment:
             - Traffic Multiplier: {data.traffic_level}
             - Speed Modifier: {data.speed_modifier}
-            - Weather: {weather_condition}
+            - Weather: {data.weather_condition}
 
             Predictions:
             - Delay: {predicted_delay} minutes
@@ -312,13 +309,13 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
 
             ## OUTPUT (STRICT JSON ONLY)
 
-            {
+            {{
                 "decision": "GO | REROUTE | NO_GO",
                 "sla_risk": true | false,
                 "confidence": integer (0–100),
                 "reason": "4-5 short, precise sentences explaining key factors (risk, delay, traffic, vehicle, deadline)",
                 "action": "single clear operational instruction"
-            }
+            }}
 
             ---
 
