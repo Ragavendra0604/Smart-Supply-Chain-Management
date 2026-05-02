@@ -200,17 +200,29 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             """
             
         try:
+            # Use the canonical model name for Vertex AI if needed, 
+            # though gemini-1.5-flash should work in most regions.
+            model_name = "gemini-1.5-flash"
+            
             response = client.models.generate_content(
-                model="gemini-1.5-flash",
+                model=model_name,
                 contents=prompt,
                 config={
                     'response_mime_type': 'application/json',
+                    'temperature': 0.1, # Keep it deterministic
                 }
             )
             
+            if not response or not response.text:
+                return "AI Insight currently unavailable (Empty response from model)."
+
             # Parse the structured JSON response
             import json
-            res_data = json.loads(response.text.strip())
+            try:
+                res_data = json.loads(response.text.strip())
+            except json.JSONDecodeError:
+                # If JSON fails, return the raw text as a fallback if it looks like a string
+                return response.text.strip()[:200]
             
             # Format for the Premium Dashboard Insight
             decision = res_data.get("decision", "GO")
@@ -222,9 +234,11 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             return f"{icon} {decision}: {reason} Instruction: {action}"
 
         except Exception as e:
-            print(f"AI Parsing Error: {e}")
-            return response.text.strip() if 'response' in locals() else "AI Insight currently unavailable."
+            logger.error(f"AI Prediction Error: {str(e)}")
+            # Return the specific error for debugging in the UI
+            error_detail = str(e).split(':')[-1].strip() if ':' in str(e) else str(e)
+            return f"AI Insight currently unavailable ({error_detail[:50]})."
 
     except Exception as e:
-        logger.error(f"Gemini Insight Error: {e}")
+        logger.error(f"Gemini Insight Wrapper Error: {e}")
         return "Tactical evaluation in progress..."

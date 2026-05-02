@@ -9,7 +9,14 @@ def get_genai_client():
     if _client is not None:
         return _client
 
+    apiKey = os.environ.get("GEMINI_API_KEY")
+    
     try:
+        if apiKey:
+            _client = genai.Client(api_key=apiKey)
+            return _client
+
+        # Fallback to Vertex AI / ADC
         credentials, project_id = google.auth.default(
             scopes=["https://www.googleapis.com/auth/cloud-platform"]
         )
@@ -18,7 +25,7 @@ def get_genai_client():
             project=project_id,
             location="us-central1"
         )
-    except Exception:
-        # Fallback for local dev
+    except Exception as e:
+        print(f"AI Client Initialization Error: {e}")
         _client = None
     return _client
