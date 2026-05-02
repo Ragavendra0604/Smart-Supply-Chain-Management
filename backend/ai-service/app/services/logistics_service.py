@@ -64,16 +64,22 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         is_holiday = 1 if dow >= 5 else 0
         
         # Features MUST be in this exact order to match the trained XGBoost model
-        features = pd.DataFrame([{
-            'distance_km': dist_km,
-            'traffic_level': traffic_index,
-            'weather_condition': severity,
-            'day_of_week': dow,
-            'time_of_day': hr
-        }])
+        features = pd.DataFrame([[
+            traffic_index,
+            severity,
+            dist_km,
+            hr,
+            dow
+        ]], columns=[
+            'traffic_level',
+            'weather_condition',
+            'distance_km',
+            'time_of_day',
+            'day_of_week'
+        ])
 
-        # Explicitly enforce column order to prevent XGBoost mismatch
-        features = features[['distance_km', 'traffic_level', 'weather_condition', 'day_of_week', 'time_of_day']]
+        # Explicitly enforce column order to match check.py results exactly
+        features = features[['traffic_level', 'weather_condition', 'distance_km', 'time_of_day', 'day_of_week']]
         
         prediction = ml_model.predict(features)[0]
         mode_upper = mode.upper()
