@@ -407,7 +407,8 @@ class DashboardController extends ChangeNotifier {
     debugPrint(
         'Starting simulation for ${targetShipment.shipmentId} at index $startIndex');
 
-    _simulationIndex = startIndex;
+    // FIX: If resuming (startIndex > 0), start from the NEXT point to prevent reverse movement
+    _simulationIndex = (startIndex == 0) ? 0 : (startIndex + 1).clamp(0, targetShipment.route.path.length - 1);
     isSimulating = true;
     simulatingShipmentId = targetShipment.shipmentId;
     errorMessage = null;

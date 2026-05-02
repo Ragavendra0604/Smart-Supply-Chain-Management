@@ -715,35 +715,68 @@ class _ActionButtonsState extends State<_ActionButtons> {
         SizedBox(
           width: double.infinity,
           height: 58,
-          child: ElevatedButton.icon(
-            onPressed: (hasAnalysis && !_isApplying)
-                ? () => _handleApply(controller)
-                : null,
-            icon: _isApplying
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.send_rounded),
-            label: Text(
-              _isApplying ? 'APPLYING ROUTE...' : 'APPLY OPTIMIZED ROUTE',
-              style: const TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w900),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.4),
-              disabledForegroundColor: Colors.white70,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: (hasAnalysis && !_isApplying)
+                      ? () => _handleApply(controller)
+                      : null,
+                  icon: _isApplying
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded),
+                  label: Text(
+                    _isApplying ? 'APPLYING...' : 'APPLY ROUTE',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.4),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                ),
               ),
-              elevation: 0,
-            ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 1,
+                child: Consumer<DashboardController>(
+                  builder: (context, controller, _) {
+                    final isSimulatingThis = controller.isSimulating &&
+                        controller.simulatingShipmentId == widget.shipment.shipmentId;
+                    final bool isStopped = widget.shipment.status == 'STOPPED';
+                    
+                    final String label = isSimulatingThis ? 'STOP' : (isStopped ? 'RESUME' : 'TEST');
+                    final IconData icon = isSimulatingThis ? Icons.stop : (isStopped ? Icons.play_arrow : Icons.play_circle_outline);
+                    final Color btnColor = isSimulatingThis ? AppTheme.danger : AppTheme.success;
+
+                    return ElevatedButton.icon(
+                      onPressed: () => controller.toggleSimulation(widget.shipment),
+                      icon: Icon(icon, size: 18),
+                      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: btnColor.withValues(alpha: 0.1),
+                        foregroundColor: btnColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: btnColor.withValues(alpha: 0.3)),
+                        ),
+                        elevation: 0,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
         if (!hasAnalysis) ...[  
