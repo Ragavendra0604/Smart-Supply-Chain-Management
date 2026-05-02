@@ -18,7 +18,9 @@ const getNews = async (origin, destination) => {
       }
     );
 
-    const articles = response.data.articles;
+    const articles = response.data.articles || [];
+
+
 
     const isRecent = (date) => {
       const hours = (Date.now() - new Date(date)) / (1000 * 60 * 60);

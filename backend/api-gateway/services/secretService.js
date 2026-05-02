@@ -28,8 +28,9 @@ export const getSecret = async (secretName) => {
       name: `projects/${projectId}/secrets/${secretName}/versions/latest`,
     });
 
-    const payload = version.payload.data.toString();
+    const payload = version.payload.data.toString().trim();
     return payload;
+
   } catch (error) {
     console.error(`[SECRET MANAGER ERROR] Could not fetch secret ${secretName}:`, error.message);
     // Fallback to env for local dev if needed, but in prod this should fail
