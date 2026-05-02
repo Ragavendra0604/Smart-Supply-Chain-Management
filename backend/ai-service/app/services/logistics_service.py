@@ -63,6 +63,7 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         hr_cos = np.cos(2 * np.pi * hr / 24)
         is_holiday = 1 if dow >= 5 else 0
         
+        # Features MUST be in this exact order to match the trained XGBoost model
         features = pd.DataFrame([{
             'distance_km': dist_km,
             'traffic_level': traffic_index,
@@ -70,6 +71,9 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
             'day_of_week': dow,
             'time_of_day': hr
         }])
+
+        # Explicitly enforce column order to prevent XGBoost mismatch
+        features = features[['distance_km', 'traffic_level', 'weather_condition', 'day_of_week', 'time_of_day']]
         
         prediction = ml_model.predict(features)[0]
         mode_upper = mode.upper()
@@ -223,6 +227,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
         origin = data.origin or "Current Location"
         dest = data.destination or "Destination"
         weather = data.weatherData or {}
+        weather_condition = weather.get("condition") or "Clear"
         
         prompt = f"""
             ROLE: Deterministic Logistics Decision Engine (Strict Execution Mode)
@@ -254,7 +259,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             Environment:
             - Traffic Multiplier: {data.traffic_level}
             - Speed Modifier: {data.speed_modifier}
-            - Weather: {data.weather_condition}
+            - Weather: {weather_condition}
 
             Predictions:
             - Delay: {predicted_delay} minutes
