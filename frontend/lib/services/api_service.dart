@@ -153,6 +153,7 @@ class ApiService {
     String? weatherCondition,
     double? trafficLevel,
     double? speedModifier,
+    String? modelName,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/shipments/simulate');
     final response = await _client.post(
@@ -163,6 +164,7 @@ class ApiService {
         'weatherCondition': weatherCondition,
         'trafficLevel': trafficLevel,
         'speedModifier': speedModifier,
+        'model_name': modelName,
       }),
     );
 
