@@ -63,14 +63,10 @@ const performAnalysis = async (shipment_id) => {
   const bestRoute = aiResponse.all_routes?.find(r => r.is_recommended) || aiResponse.all_routes?.[0] || routes[0] || {};
   
   const enriched_data = {
-    route: routes[0] || {},
-    alternatives: routes.slice(1),
     traffic: {
       duration_with_traffic: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
       congestion_level: aiResponse.risk_level === 'HIGH' ? 'HEAVY' : aiResponse.risk_level === 'MEDIUM' ? 'MODERATE' : 'LOW'
     },
-    weather: weather,
-    news: news,
     fuel_cost: bestRoute.total_fuel || 0,
     estimated_time: bestRoute.travel_time_min || 0,
     estimated_cost: bestRoute.total_cost || 0,
@@ -134,7 +130,7 @@ const analyzeShipment = async (req, res) => {
 
 const simulateShipment = async (req, res) => {
   try {
-    const { shipment_id, weatherCondition, trafficLevel, speedModifier } = req.body;
+    const { shipment_id, weatherCondition, trafficLevel, speedModifier, model_name } = req.body;
 
     const doc = await db().collection('shipments').doc(shipment_id).get();
     if (!doc.exists) throw new Error('Shipment not found');
@@ -167,7 +163,8 @@ const simulateShipment = async (req, res) => {
       currentLocation: shipment.current_location || null,
       // Pass simulation flags if AI service supports them (heuristics applied in logistics_service.py)
       traffic_index_override: trafficLevel,
-      speed_modifier: speedModifier
+      speed_modifier: speedModifier,
+      model_name: model_name
     };
 
     const rawAiResponse = await aiService.getPrediction(payload);

@@ -370,10 +370,30 @@ class _ShipmentCard extends StatelessWidget {
                     icon: Icons.timer,
                   ),
                   const SizedBox(width: 8),
-                  MetricChip(
-                    label: 'Speed',
-                    value: '${shipment.speedKmH.toStringAsFixed(0)} km/h',
-                    icon: Icons.speed,
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('SPEED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppTheme.textMuted, letterSpacing: 0.5)),
+                            Text('${shipment.speedKmH.toStringAsFixed(0)} km/h', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.primary)),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: (shipment.speedKmH / 120).clamp(0.0, 1.0),
+                            backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                            color: shipment.speedKmH > 90 ? AppTheme.danger : (shipment.speedKmH > 70 ? AppTheme.warning : AppTheme.primary),
+                            minHeight: 6,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                   const Spacer(),
                   Consumer<DashboardController>(

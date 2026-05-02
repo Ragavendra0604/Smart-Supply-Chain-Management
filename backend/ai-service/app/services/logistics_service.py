@@ -26,6 +26,7 @@ class InputData(BaseModel):
     delivery_deadline: Optional[str] = None
     fuel_level: Optional[float] = 100.0
     vehicle_health: Optional[str] = "Good"
+    model_name: Optional[str] = "gemini-2.5-flash"
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD") -> float:
     ml_model = get_ml_model()
@@ -79,7 +80,9 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         logger.error(f"ML Prediction Error: {e}")
         return 0.0
 
-def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD") -> List[Dict[str, Any]]:
+def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD", 
+                         fuel_level: float = 100.0, vehicle_health: str = "Good", 
+                         news_data: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
     FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
     processed_routes = []
@@ -109,11 +112,41 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
         total_fuel = round(dist_km * FUEL_PER_KM, 1)
         predicted_delay_mins = get_ml_delay_prediction(route, weather, mode)
             
-        risk_score = 0.0
+        # --- HOLISTIC RISK SCORING ENGINE ---
+        # 1. Base Risk (Traffic/ML Delay)
+        base_risk = 0.0
         if duration_min > 0:
             risk_ratio = predicted_delay_mins / duration_min
-            risk_score = round(min(risk_ratio * 2.0, 1.0), 3) 
-        else: risk_score = 0.0
+            base_risk = risk_ratio * 2.0 # Scale 0.5 delay to 1.0 risk
+        
+        # 2. Weather Penalty
+        weather_penalty = 0.0
+        cond = (weather.get("condition") or "clear").lower()
+        if any(x in cond for x in ["storm", "flood", "tornado", "hurricane"]): 
+            weather_penalty = 0.6
+        elif any(x in cond for x in ["rain", "snow", "fog"]): 
+            weather_penalty = 0.25
+        
+        # 3. Mechanical/Resource Penalty
+        resource_penalty = 0.0
+        # Low Fuel
+        if fuel_level < 15: resource_penalty += 0.5
+        elif fuel_level < 30: resource_penalty += 0.2
+        
+        # Vehicle Health
+        health_lower = vehicle_health.lower()
+        if "critical" in health_lower: resource_penalty += 0.7
+        elif "poor" in health_lower or "warning" in health_lower: resource_penalty += 0.3
+        
+        # 4. News/Event Signals
+        news_penalty = 0.0
+        if news_data:
+            relevant_news = [n for n in news_data if any(x in n.get('title','').lower() for x in ['accident', 'strike', 'protest', 'closed'])]
+            news_penalty = min(len(relevant_news) * 0.15, 0.4)
+
+        # COMPOSITE SCORE (Safety First)
+        raw_risk_score = base_risk + weather_penalty + resource_penalty + news_penalty
+        risk_score = round(min(raw_risk_score, 1.0), 3)
 
         processed_routes.append({
             "summary": route.get("summary", f"Route {i+1}"),
@@ -121,7 +154,7 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
             "travel_time_min": duration_min,
             "total_cost": total_cost,
             "total_fuel": total_fuel,
-            "risk_level": "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH",
+            "risk_level": "LOW" if risk_score < 0.35 else "MEDIUM" if risk_score < 0.75 else "HIGH",
             "risk_score": risk_score,
             "predicted_delay_mins": predicted_delay_mins,
             "is_recommended": False,
@@ -137,7 +170,8 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
             time_factor = r["travel_time_min"] / max_time
             cost_factor = r["total_cost"] / max_cost
             risk_factor = r["risk_score"]
-            composite_score = (time_factor * 0.4) + (cost_factor * 0.4) + (risk_factor * 0.2)
+            # Recommendation weight: Low Risk is now prioritized more (0.4 weight)
+            composite_score = (time_factor * 0.3) + (cost_factor * 0.3) + (risk_factor * 0.4)
             if composite_score < best_score:
                 best_score = composite_score
                 best_route_index = i
@@ -200,7 +234,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             """
             
         try:
-            model_name = "gemini-2.5-flash"
+            model_name = data.model_name or "gemini-2.5-flash"
             
             response = client.models.generate_content(
                 model=model_name,

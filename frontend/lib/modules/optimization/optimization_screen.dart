@@ -4,7 +4,6 @@ import '../../controllers/dashboard_controller.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/shipment.dart';
 import '../../widgets/info_card.dart';
-import '../../widgets/metric_chip.dart';
 
 class OptimizationScreen extends StatelessWidget {
   const OptimizationScreen({required this.shipment, super.key});
@@ -78,7 +77,8 @@ class _Header extends StatelessWidget {
         const SizedBox(height: 4),
         Row(
           children: [
-            const Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textSecondary),
+            const Icon(Icons.location_on_outlined,
+                size: 14, color: AppTheme.textSecondary),
             const SizedBox(width: 4),
             Text(
               '${shipment.origin} → ${shipment.destination}',
@@ -90,10 +90,48 @@ class _Header extends StatelessWidget {
             ),
             if (shipment.speedKmH > 0) ...[
               const Spacer(),
-              MetricChip(
-                label: 'Current Speed',
-                value: '${shipment.speedKmH.toStringAsFixed(0)} km/h',
-                icon: Icons.speed,
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        const Text('LIVE SPEED',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.textMuted,
+                                letterSpacing: 0.5)),
+                        const SizedBox(width: 8),
+                        Text('${shipment.speedKmH.toStringAsFixed(0)} km/h',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: AppTheme.primary)),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 120,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (shipment.speedKmH / 120).clamp(0.0, 1.0),
+                          backgroundColor:
+                              AppTheme.primary.withValues(alpha: 0.1),
+                          color: shipment.speedKmH > 90
+                              ? AppTheme.danger
+                              : (shipment.speedKmH > 70
+                                  ? AppTheme.warning
+                                  : AppTheme.primary),
+                          minHeight: 6,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ],
@@ -158,7 +196,10 @@ class _RiskBanner extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   message,
-                  style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                      color: color.withValues(alpha: 0.8),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -219,7 +260,8 @@ class _ComparisonSection extends StatelessWidget {
           before: '\$${opt.before.cost.toStringAsFixed(2)}',
           after: '\$${opt.after.cost.toStringAsFixed(2)}',
           icon: Icons.payments_outlined,
-          savingLabel: costSaved > 0 ? '-\$${costSaved.toStringAsFixed(2)}' : null,
+          savingLabel:
+              costSaved > 0 ? '-\$${costSaved.toStringAsFixed(2)}' : null,
           isSaving: costSaved > 0,
         ),
         const SizedBox(height: 12),
@@ -228,7 +270,8 @@ class _ComparisonSection extends StatelessWidget {
           before: '${opt.before.fuel.toStringAsFixed(1)} L',
           after: '${opt.after.fuel.toStringAsFixed(1)} L',
           icon: Icons.local_gas_station_outlined,
-          savingLabel: fuelSaved > 0 ? '-${fuelSaved.toStringAsFixed(1)} L' : null,
+          savingLabel:
+              fuelSaved > 0 ? '-${fuelSaved.toStringAsFixed(1)} L' : null,
           isSaving: fuelSaved > 0,
         ),
       ],
@@ -284,7 +327,8 @@ class _MetricRow extends StatelessWidget {
               ),
               if (savingLabel != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppTheme.success.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -310,7 +354,8 @@ class _MetricRow extends StatelessWidget {
                   color: AppTheme.textPrimary,
                 ),
               ),
-              const Icon(Icons.arrow_forward, color: AppTheme.textMuted, size: 20),
+              const Icon(Icons.arrow_forward,
+                  color: AppTheme.textMuted, size: 20),
               Expanded(
                 child: _ValueColumn(
                   label: 'OPTIMIZED',
@@ -389,7 +434,8 @@ class _AllRoutesSection extends StatelessWidget {
           final i = entry.key;
           final r = entry.value;
           final isRecommended = r['is_recommended'] == true;
-          final riskLevel = (r['risk_level'] ?? 'UNKNOWN').toString().toUpperCase();
+          final riskLevel =
+              (r['risk_level'] ?? 'UNKNOWN').toString().toUpperCase();
 
           Color riskColor;
           if (riskLevel == 'HIGH') {
@@ -421,16 +467,16 @@ class _AllRoutesSection extends StatelessWidget {
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: isRecommended
-                        ? AppTheme.primary
-                        : Colors.grey.shade200,
+                    color:
+                        isRecommended ? AppTheme.primary : Colors.grey.shade200,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
                     child: Text(
                       '${i + 1}',
                       style: TextStyle(
-                        color: isRecommended ? Colors.white : AppTheme.textMuted,
+                        color:
+                            isRecommended ? Colors.white : AppTheme.textMuted,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
@@ -490,7 +536,8 @@ class _AllRoutesSection extends StatelessWidget {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: riskColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
@@ -656,8 +703,7 @@ class _NewsSection extends StatelessWidget {
                       ),
                     ],
                   ),
-                  if (i < news.length - 1 && i < 2)
-                    const Divider(height: 20),
+                  if (i < news.length - 1 && i < 2) const Divider(height: 20),
                 ],
               );
             }).toList(),
@@ -735,13 +781,16 @@ class _ActionButtonsState extends State<_ActionButtons> {
                       : const Icon(Icons.send_rounded),
                   label: Text(
                     _isApplying ? 'APPLYING...' : 'APPLY ROUTE',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900),
+                    style: const TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w900),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: AppTheme.primary.withValues(alpha: 0.4),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    disabledBackgroundColor:
+                        AppTheme.primary.withValues(alpha: 0.4),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
                   ),
                 ),
@@ -752,23 +801,35 @@ class _ActionButtonsState extends State<_ActionButtons> {
                 child: Consumer<DashboardController>(
                   builder: (context, controller, _) {
                     final isSimulatingThis = controller.isSimulating &&
-                        controller.simulatingShipmentId == widget.shipment.shipmentId;
+                        controller.simulatingShipmentId ==
+                            widget.shipment.shipmentId;
                     final bool isStopped = widget.shipment.status == 'STOPPED';
-                    
-                    final String label = isSimulatingThis ? 'STOP' : (isStopped ? 'RESUME' : 'TEST');
-                    final IconData icon = isSimulatingThis ? Icons.stop : (isStopped ? Icons.play_arrow : Icons.play_circle_outline);
-                    final Color btnColor = isSimulatingThis ? AppTheme.danger : AppTheme.success;
+
+                    final String label = isSimulatingThis
+                        ? 'STOP'
+                        : (isStopped ? 'RESUME' : 'TEST');
+                    final IconData icon = isSimulatingThis
+                        ? Icons.stop
+                        : (isStopped
+                            ? Icons.play_arrow
+                            : Icons.play_circle_outline);
+                    final Color btnColor =
+                        isSimulatingThis ? AppTheme.danger : AppTheme.success;
 
                     return ElevatedButton.icon(
-                      onPressed: () => controller.toggleSimulation(widget.shipment),
+                      onPressed: () =>
+                          controller.toggleSimulation(widget.shipment),
                       icon: Icon(icon, size: 18),
-                      label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                      label: Text(label,
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w900)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: btnColor.withValues(alpha: 0.1),
                         foregroundColor: btnColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: btnColor.withValues(alpha: 0.3)),
+                          side: BorderSide(
+                              color: btnColor.withValues(alpha: 0.3)),
                         ),
                         elevation: 0,
                       ),
@@ -779,7 +840,7 @@ class _ActionButtonsState extends State<_ActionButtons> {
             ],
           ),
         ),
-        if (!hasAnalysis) ...[  
+        if (!hasAnalysis) ...[
           const SizedBox(height: 8),
           const Text(
             'Run AI Analysis first to enable route application.',
@@ -795,6 +856,7 @@ class _ActionButtonsState extends State<_ActionButtons> {
     );
   }
 }
+
 class _WhatIfSimulator extends StatefulWidget {
   final Shipment shipment;
   const _WhatIfSimulator({required this.shipment});
@@ -808,6 +870,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
   String _weather = 'Clear';
   double _speedModifier = 1.0;
   bool _isHighPriority = false;
+  String _selectedModel = 'gemini-2.5-flash';
 
   double _simulatedRisk = 0.0;
   String _simulatedDelay = "0 mins";
@@ -817,8 +880,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
   @override
   void initState() {
     super.initState();
-    _weather = widget.shipment.weather.condition.isEmpty 
-        ? 'Clear' 
+    _weather = widget.shipment.weather.condition.isEmpty
+        ? 'Clear'
         : widget.shipment.weather.condition;
     _recalculate();
   }
@@ -852,6 +915,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
         weatherCondition: _weather,
         trafficLevel: _trafficLevel,
         speedModifier: _speedModifier,
+        modelName: _selectedModel,
       );
 
       setState(() {
@@ -863,7 +927,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
     } catch (e) {
       setState(() => _isAiLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('AI Simulation failed. Falling back to heuristics.')),
+        const SnackBar(
+            content: Text('AI Simulation failed. Falling back to heuristics.')),
       );
     }
   }
@@ -875,7 +940,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
       children: [
         Row(
           children: [
-            const Icon(Icons.psychology_outlined, color: AppTheme.primary, size: 22),
+            const Icon(Icons.psychology_outlined,
+                color: AppTheme.primary, size: 22),
             const SizedBox(width: 10),
             Text(
               'Tactical "What-if" Simulator',
@@ -923,10 +989,14 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                               _recalculate();
                             }
                           },
-                          selectedColor: AppTheme.primary.withValues(alpha: 0.1),
+                          selectedColor:
+                              AppTheme.primary.withValues(alpha: 0.1),
                           labelStyle: TextStyle(
-                            color: selected ? AppTheme.primary : AppTheme.textSecondary,
-                            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                            color: selected
+                                ? AppTheme.primary
+                                : AppTheme.textSecondary,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.normal,
                           ),
                         ),
                       );
@@ -947,6 +1017,46 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                     _recalculate();
                   },
                   activeColor: AppTheme.primary,
+                ),
+              ),
+              const Divider(height: 24),
+              _buildSimulatorControl(
+                label: 'Inference Model',
+                value:
+                    _selectedModel.split('-').skip(1).join('-').toUpperCase(),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['gemini-2.5-flash'].map((m) {
+                      final selected = _selectedModel == m;
+                      final label = m.contains('2.5')
+                          ? '2.5 Flash'
+                          : (m.contains('pro') ? '1.5 Pro' : '1.5 Flash');
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(label),
+                          selected: selected,
+                          onSelected: (s) {
+                            if (s) {
+                              setState(() => _selectedModel = m);
+                              _recalculate();
+                            }
+                          },
+                          selectedColor:
+                              AppTheme.primary.withValues(alpha: 0.1),
+                          labelStyle: TextStyle(
+                            color: selected
+                                ? AppTheme.primary
+                                : AppTheme.textSecondary,
+                            fontWeight:
+                                selected ? FontWeight.bold : FontWeight.normal,
+                            fontSize: 10,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
               const Divider(height: 24),
@@ -980,11 +1090,15 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                     children: [
                       Text(
                         'AI High Fidelity',
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.textSecondary),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: AppTheme.textSecondary),
                       ),
                       Text(
                         'Powered by v3 XGBoost Engine',
-                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                        style:
+                            TextStyle(fontSize: 10, color: AppTheme.textMuted),
                       ),
                     ],
                   ),
@@ -992,15 +1106,23 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                     height: 36,
                     child: ElevatedButton.icon(
                       onPressed: _isAiLoading ? null : _runAiSimulation,
-                      icon: _isAiLoading 
-                        ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
-                        : const Icon(Icons.bolt, size: 16),
-                      label: const Text('RUN AI SIM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                      icon: _isAiLoading
+                          ? const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2, color: AppTheme.primary))
+                          : const Icon(Icons.bolt, size: 16),
+                      label: const Text('RUN AI SIM',
+                          style: TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w900)),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                        backgroundColor:
+                            AppTheme.primary.withValues(alpha: 0.1),
                         foregroundColor: AppTheme.primary,
                         elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
@@ -1010,12 +1132,12 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: _useHeuristics 
+                  color: _useHeuristics
                       ? AppTheme.primary.withValues(alpha: 0.05)
                       : AppTheme.success.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: _useHeuristics 
+                    color: _useHeuristics
                         ? AppTheme.primary.withValues(alpha: 0.1)
                         : AppTheme.success.withValues(alpha: 0.2),
                   ),
@@ -1026,16 +1148,21 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          _useHeuristics ? 'HEURISTIC ESTIMATE' : 'AI POWERED PREDICTION',
+                          _useHeuristics
+                              ? 'HEURISTIC ESTIMATE'
+                              : 'AI PREDICTION (${_selectedModel.toUpperCase()})',
                           style: TextStyle(
-                            color: _useHeuristics ? AppTheme.textMuted : AppTheme.success,
+                            color: _useHeuristics
+                                ? AppTheme.textMuted
+                                : AppTheme.success,
                             fontSize: 9,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1,
                           ),
                         ),
-                        if (!_useHeuristics) 
-                          const Icon(Icons.verified, color: AppTheme.success, size: 14),
+                        if (!_useHeuristics)
+                          const Icon(Icons.verified,
+                              color: AppTheme.success, size: 14),
                       ],
                     ),
                     const SizedBox(height: 12),
@@ -1044,9 +1171,11 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                         _SimResult(
                           label: 'SIMULATED RISK',
                           value: '${(_simulatedRisk * 100).toInt()}%',
-                          color: _simulatedRisk > 0.7 
-                              ? AppTheme.danger 
-                              : (_simulatedRisk > 0.4 ? AppTheme.warning : AppTheme.success),
+                          color: _simulatedRisk > 0.7
+                              ? AppTheme.danger
+                              : (_simulatedRisk > 0.4
+                                  ? AppTheme.warning
+                                  : AppTheme.success),
                         ),
                         Container(
                           width: 1,

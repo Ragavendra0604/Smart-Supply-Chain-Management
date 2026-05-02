@@ -269,6 +269,7 @@ class DashboardController extends ChangeNotifier {
     String? weatherCondition,
     double? trafficLevel,
     double? speedModifier,
+    String? modelName,
   }) async {
     try {
       final result = await _apiService.simulateShipment(
@@ -276,6 +277,7 @@ class DashboardController extends ChangeNotifier {
         weatherCondition: weatherCondition,
         trafficLevel: trafficLevel,
         speedModifier: speedModifier,
+        modelName: modelName,
       );
       return result;
     } catch (e) {

@@ -84,7 +84,14 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     weather_data = shipment_data.get("weatherData", {})
     news_data = shipment_data.get("newsData", [])
 
-    processed_routes = score_and_rank_routes(route_data, weather_data, mode)
+    processed_routes = score_and_rank_routes(
+        route_data, 
+        weather_data, 
+        mode,
+        fuel_level=shipment_data.get("fuel_level", 100.0),
+        vehicle_health=shipment_data.get("vehicle_health", "Good"),
+        news_data=news_data
+    )
     if not processed_routes: return
 
     best = next((r for r in processed_routes if r["is_recommended"]), processed_routes[0])
@@ -119,7 +126,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             is_perishable=shipment_data.get("is_perishable", False),
             delivery_deadline=shipment_data.get("delivery_deadline"),
             fuel_level=shipment_data.get("fuel_level", 100.0),
-            vehicle_health=shipment_data.get("vehicle_health", "Good")
+            vehicle_health=shipment_data.get("vehicle_health", "Good"),
+            model_name=shipment_data.get("ai_config", {}).get("model") or "gemini-2.5-flash" # Use preferred or default
         )
         insight = generate_logistics_insight(
             best['risk_score'], 
@@ -180,7 +188,14 @@ def handle_predict(data: InputData):
             
         weather = data.weatherData or {}
         mode = data.mode or "ROAD"
-        scored_routes = score_and_rank_routes(raw_routes, weather, mode)
+        scored_routes = score_and_rank_routes(
+            raw_routes, 
+            weather, 
+            mode,
+            fuel_level=data.fuel_level if data.fuel_level is not None else 100.0,
+            vehicle_health=data.vehicle_health or "Good",
+            news_data=data.newsData
+        )
 
         if not scored_routes:
             return {
