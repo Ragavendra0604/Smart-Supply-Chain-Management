@@ -40,7 +40,6 @@ jobs:
           service: 'api-gateway'
           region: 'us-central1'
           source: './backend/api-gateway'
-          flags: '--memory 512Mi --concurrency 80 --allow-unauthenticated'
           env_vars: |
             AI_SERVICE_URL=https://ai-service-1026695506439.us-central1.run.app
             GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
@@ -57,7 +56,6 @@ jobs:
           project-id: ssm-sb
           no_traffic: false
           source: './backend/ai-service'
-          flags: '--memory 1Gi --concurrency 10 --allow-unauthenticated'
           env_vars: |
             GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY }}
             MODEL_BUCKET=logistics-models-prod

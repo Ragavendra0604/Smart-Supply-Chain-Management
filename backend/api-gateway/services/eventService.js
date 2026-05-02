@@ -8,13 +8,23 @@ const TOPIC_NAME = process.env.PUBSUB_TOPIC || 'logistics-events';
 const BQ_DATASET = 'logistics_analytics';
 const BQ_TABLE = 'events_stream';
 
-// --- BIGQUERY BATCHING CONFIG ---
-const BQ_BATCH_SIZE = 50; // Rows per insert
-const BQ_BATCH_TIMEOUT = 10000; // 10 seconds
+// --- BIGQUERY BATCHING CONFIG (FINOPS OPTIMIZED) ---
+const BQ_BATCH_SIZE = 100; // Increased for higher throughput
+const BQ_BATCH_TIMEOUT = 60000; // 60 seconds (reduces streaming overhead)
 let bqBuffer = [];
 let bqTimer = null;
+let flushInProgress = false;
 
 class EventManager {
+  constructor() {
+    // PRODUCTION SRE: Handle Cloud Run lifecycle events
+    process.on('SIGTERM', async () => {
+      console.log('[SYSTEM] SIGTERM received. Draining BigQuery buffer...');
+      await this.flushBigQuery();
+      process.exit(0);
+    });
+  }
+
   /**
    * Publish asynchronous event to Google Cloud Pub/Sub
    */
@@ -23,15 +33,13 @@ class EventManager {
     const dataBuffer = Buffer.from(JSON.stringify(payload));
 
     try {
-      const messageId = await pubsub.topic(TOPIC_NAME).publishMessage({
+      await pubsub.topic(TOPIC_NAME).publishMessage({
         data: dataBuffer,
         attributes: { eventType },
         orderingKey: data.shipment_id || 'default'
       });
-      console.log(`[PUBSUB] Event ${eventType} published. ID: ${messageId}`);
     } catch (err) {
       console.error(`[PUBSUB ERROR] Failed to publish event: ${err.message}`);
-      throw err;
     }
   }
 
@@ -56,10 +64,12 @@ class EventManager {
   }
 
   async flushBigQuery() {
-    if (bqBuffer.length === 0) return;
+    if (bqBuffer.length === 0 || flushInProgress) return;
 
+    flushInProgress = true;
     const rowsToInsert = [...bqBuffer];
     bqBuffer = [];
+    
     if (bqTimer) {
       clearTimeout(bqTimer);
       bqTimer = null;
@@ -70,6 +80,10 @@ class EventManager {
       console.log(`[BIGQUERY] Flushed ${rowsToInsert.length} rows to analytics.`);
     } catch (err) {
       console.error(`[BIGQUERY ERROR] Batch insert failed:`, JSON.stringify(err.errors || err));
+      // Re-insert into buffer if it failed (Simple retry logic)
+      bqBuffer = [...rowsToInsert, ...bqBuffer];
+    } finally {
+      flushInProgress = false;
     }
   }
 }

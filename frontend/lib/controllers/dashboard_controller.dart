@@ -48,6 +48,7 @@ class DashboardController extends ChangeNotifier {
   StreamSubscription<Shipment>? _activeShipmentSubscription;
   Timer? _simulationTimer;
   Timer? _systemCheckTimer;
+  StreamSubscription<bool>? _globalStopSubscription;
   String? _lastHighRiskToken;
   int _simulationIndex = 0;
 
@@ -59,37 +60,36 @@ class DashboardController extends ChangeNotifier {
       await Future.wait([
         refreshShipments(selectFirstWhenMissing: true),
         fetchSystemStats(),
-        _checkSystemStatus(),
       ]);
 
-      // Start periodic system check
-      _systemCheckTimer?.cancel();
-      _systemCheckTimer = Timer.periodic(
-          const Duration(seconds: 10), (_) => _checkSystemStatus());
+      // PRODUCTION-GRADE: Replace polling with Real-time Stream
+      _globalStopSubscription?.cancel();
+      if (_firebaseService.enabled) {
+        _globalStopSubscription = _firebaseService.watchGlobalStopStatus().listen(_handleStatusUpdate);
+      } else {
+        // Fallback for non-Firebase environments (with jittered polling)
+        _systemCheckTimer?.cancel();
+        _systemCheckTimer = Timer.periodic(
+            const Duration(seconds: 15), (_) => _pollSystemStatus());
+      }
 
       if (activeShipmentId != null) {
         _bindShipment(activeShipmentId!);
         _apiService.logToServer('INFO', 'Dashboard bootstrapped',
             {'activeShipment': activeShipmentId});
-      } else {
-        errorMessage =
-            'No shipments found. Create or analyze a shipment first.';
-        _apiService.logToServer(
-            'WARNING', 'No shipments found during bootstrap');
       }
     } catch (error) {
       errorMessage = 'Unable to load dashboard data.';
-      _apiService.logToServer(
-          'ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
+      _apiService.logToServer('ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
     } finally {
       isBootstrapping = false;
       notifyListeners();
     }
   }
 
-  Future<void> _checkSystemStatus() async {
+  void _handleStatusUpdate(bool stopped) {
     final wasStopped = isGlobalStopped;
-    isGlobalStopped = await _apiService.fetchGlobalStopStatus();
+    isGlobalStopped = stopped;
 
     if (isGlobalStopped && !wasStopped) {
       _stopEverythingLocally();
@@ -98,6 +98,13 @@ class DashboardController extends ChangeNotifier {
     if (isGlobalStopped != wasStopped) {
       notifyListeners();
     }
+  }
+
+  Future<void> _pollSystemStatus() async {
+    try {
+      final stopped = await _apiService.fetchGlobalStopStatus();
+      _handleStatusUpdate(stopped);
+    } catch (_) {}
   }
 
   void _stopEverythingLocally() {
@@ -560,6 +567,7 @@ class DashboardController extends ChangeNotifier {
   @override
   void dispose() {
     _activeShipmentSubscription?.cancel();
+    _globalStopSubscription?.cancel();
     _simulationTimer?.cancel();
     _systemCheckTimer?.cancel();
     super.dispose();

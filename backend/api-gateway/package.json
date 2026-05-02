@@ -19,6 +19,7 @@
     "@google-cloud/secret-manager": "^6.1.1",
     "@mapbox/polyline": "^1.2.1",
     "axios": "^1.15.2",
+    "axios-retry": "^4.5.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^4.21.1",

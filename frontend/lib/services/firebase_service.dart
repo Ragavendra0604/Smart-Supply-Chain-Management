@@ -31,4 +31,12 @@ class FirebaseService {
         .where((snapshot) => snapshot.exists && snapshot.data() != null)
         .map((snapshot) => Shipment.fromMap(snapshot.id, snapshot.data()!));
   }
+
+  Stream<bool> watchGlobalStopStatus() {
+    return _firestore
+        .collection('system')
+        .doc('config')
+        .snapshots()
+        .map((snapshot) => snapshot.data()?['isGlobalStopped'] == true);
+  }
 }
