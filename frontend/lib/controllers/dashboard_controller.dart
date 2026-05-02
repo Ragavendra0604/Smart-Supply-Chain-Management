@@ -300,7 +300,20 @@ class DashboardController extends ChangeNotifier {
         trafficLevel: trafficLevel,
         speedModifier: speedModifier,
       );
-      successMessage = 'Simulation scenario injected into live transit.';
+      if (result['success'] == true && result['analysis'] != null) {
+        // Force update the local shipment state with the new AI results
+        if (latestShipment != null && latestShipment!.shipmentId == shipmentId) {
+          final newAi = ShipmentAiInsight.fromMap(result['analysis']);
+          latestShipment = latestShipment!.copyWith(
+            ai: newAi,
+            weather: latestShipment!.weather.copyWith(
+              condition: weatherCondition,
+            ),
+          );
+        }
+      }
+      
+      successMessage = 'Simulation scenario injected and AI re-analyzed.';
       _apiService.logToServer('INFO', 'Scenario injected', {
         'shipmentId': shipmentId,
         'weather': weatherCondition,

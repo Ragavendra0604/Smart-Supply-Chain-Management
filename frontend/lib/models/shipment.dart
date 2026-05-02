@@ -204,6 +204,20 @@ class ShipmentWeather {
   final num humidity;
   final num windSpeed;
 
+  ShipmentWeather copyWith({
+    String? condition,
+    num? temperature,
+    num? humidity,
+    num? windSpeed,
+  }) {
+    return ShipmentWeather(
+      condition: condition ?? this.condition,
+      temperature: temperature ?? this.temperature,
+      humidity: humidity ?? this.humidity,
+      windSpeed: windSpeed ?? this.windSpeed,
+    );
+  }
+
   bool get hasData => condition.isNotEmpty || temperature != 0 || humidity != 0;
 
   factory ShipmentWeather.fromMap(Map<String, dynamic> data) {
