@@ -48,6 +48,8 @@ class OptimizationScreen extends StatelessWidget {
             const SizedBox(height: 24),
             if (shipment.news.isNotEmpty) _NewsSection(news: shipment.news),
             const SizedBox(height: 24),
+            _WhatIfSimulator(shipment: shipment),
+            const SizedBox(height: 24),
             _ActionButtons(shipment: shipment),
           ],
         ),
@@ -757,6 +759,358 @@ class _ActionButtonsState extends State<_ActionButtons> {
           ),
         ],
       ],
+    );
+  }
+}
+class _WhatIfSimulator extends StatefulWidget {
+  final Shipment shipment;
+  const _WhatIfSimulator({required this.shipment});
+
+  @override
+  State<_WhatIfSimulator> createState() => _WhatIfSimulatorState();
+}
+
+class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
+  double _trafficLevel = 0.4;
+  String _weather = 'Clear';
+  double _speedModifier = 1.0;
+  bool _isHighPriority = false;
+
+  double _simulatedRisk = 0.0;
+  String _simulatedDelay = "0 mins";
+  bool _isAiLoading = false;
+  bool _useHeuristics = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _weather = widget.shipment.weather.condition.isEmpty 
+        ? 'Clear' 
+        : widget.shipment.weather.condition;
+    _recalculate();
+  }
+
+  void _recalculate() {
+    double risk = 0.1;
+    if (_trafficLevel > 0.6) risk += 0.35;
+    if (_weather.toLowerCase().contains('rain')) risk += 0.2;
+    if (_weather.toLowerCase().contains('storm')) risk += 0.55;
+    if (_speedModifier > 1.2) risk += 0.3;
+    if (_isHighPriority) risk += 0.1;
+
+    int delayMins = (40 * _trafficLevel).toInt();
+    if (_weather.toLowerCase().contains('storm')) delayMins += 60;
+    if (_weather.toLowerCase().contains('rain')) delayMins += 25;
+    if (_speedModifier > 1.0) delayMins = (delayMins / _speedModifier).toInt();
+
+    setState(() {
+      _simulatedRisk = risk.clamp(0.05, 0.98);
+      _simulatedDelay = "$delayMins mins";
+      _useHeuristics = true;
+    });
+  }
+
+  Future<void> _runAiSimulation() async {
+    setState(() => _isAiLoading = true);
+    try {
+      final controller = context.read<DashboardController>();
+      final result = await controller.simulateTacticalScenario(
+        shipmentId: widget.shipment.shipmentId,
+        weatherCondition: _weather,
+        trafficLevel: _trafficLevel,
+        speedModifier: _speedModifier,
+      );
+
+      setState(() {
+        _simulatedRisk = (result['risk_score'] as num).toDouble();
+        _simulatedDelay = result['delay_prediction']?.toString() ?? '0 mins';
+        _isAiLoading = false;
+        _useHeuristics = false;
+      });
+    } catch (e) {
+      setState(() => _isAiLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('AI Simulation failed. Falling back to heuristics.')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.psychology_outlined, color: AppTheme.primary, size: 22),
+            const SizedBox(width: 10),
+            Text(
+              'Tactical "What-if" Simulator',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        InfoCard(
+          child: Column(
+            children: [
+              _buildSimulatorControl(
+                label: 'Traffic Density',
+                value: '${(_trafficLevel * 100).toInt()}%',
+                child: Slider(
+                  value: _trafficLevel,
+                  onChanged: (v) {
+                    setState(() => _trafficLevel = v);
+                    _recalculate();
+                  },
+                  activeColor: AppTheme.primary,
+                ),
+              ),
+              const Divider(height: 24),
+              _buildSimulatorControl(
+                label: 'Weather Scenario',
+                value: _weather,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: ['Clear', 'Rain', 'Storm', 'Fog'].map((w) {
+                      final selected = _weather == w;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(w),
+                          selected: selected,
+                          onSelected: (s) {
+                            if (s) {
+                              setState(() => _weather = w);
+                              _recalculate();
+                            }
+                          },
+                          selectedColor: AppTheme.primary.withValues(alpha: 0.1),
+                          labelStyle: TextStyle(
+                            color: selected ? AppTheme.primary : AppTheme.textSecondary,
+                            fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+              const Divider(height: 24),
+              _buildSimulatorControl(
+                label: 'Target Speed Factor',
+                value: 'x${_speedModifier.toStringAsFixed(1)}',
+                child: Slider(
+                  value: _speedModifier,
+                  min: 0.5,
+                  max: 1.5,
+                  onChanged: (v) {
+                    setState(() => _speedModifier = v);
+                    _recalculate();
+                  },
+                  activeColor: AppTheme.primary,
+                ),
+              ),
+              const Divider(height: 24),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(
+                  'Priority Cargo',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Simulate impact of time-critical delivery constraints',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                ),
+                value: _isHighPriority,
+                onChanged: (v) {
+                  setState(() => _isHighPriority = v);
+                  _recalculate();
+                },
+                activeColor: AppTheme.primary,
+              ),
+              const Divider(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'AI High Fidelity',
+                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppTheme.textSecondary),
+                      ),
+                      Text(
+                        'Powered by v3 XGBoost Engine',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                      ),
+                    ],
+                  ),
+                  SizedBox(
+                    height: 36,
+                    child: ElevatedButton.icon(
+                      onPressed: _isAiLoading ? null : _runAiSimulation,
+                      icon: _isAiLoading 
+                        ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary))
+                        : const Icon(Icons.bolt, size: 16),
+                      label: const Text('RUN AI SIM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
+                        foregroundColor: AppTheme.primary,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _useHeuristics 
+                      ? AppTheme.primary.withValues(alpha: 0.05)
+                      : AppTheme.success.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: _useHeuristics 
+                        ? AppTheme.primary.withValues(alpha: 0.1)
+                        : AppTheme.success.withValues(alpha: 0.2),
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _useHeuristics ? 'HEURISTIC ESTIMATE' : 'AI POWERED PREDICTION',
+                          style: TextStyle(
+                            color: _useHeuristics ? AppTheme.textMuted : AppTheme.success,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        if (!_useHeuristics) 
+                          const Icon(Icons.verified, color: AppTheme.success, size: 14),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        _SimResult(
+                          label: 'SIMULATED RISK',
+                          value: '${(_simulatedRisk * 100).toInt()}%',
+                          color: _simulatedRisk > 0.7 
+                              ? AppTheme.danger 
+                              : (_simulatedRisk > 0.4 ? AppTheme.warning : AppTheme.success),
+                        ),
+                        Container(
+                          width: 1,
+                          height: 40,
+                          color: AppTheme.primary.withValues(alpha: 0.1),
+                          margin: const EdgeInsets.symmetric(horizontal: 16),
+                        ),
+                        _SimResult(
+                          label: 'EST. DELAY',
+                          value: _simulatedDelay,
+                          color: AppTheme.primary,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSimulatorControl({
+    required String label,
+    required String value,
+    required Widget child,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+                color: AppTheme.primary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+}
+
+class _SimResult extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SimResult({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: AppTheme.textMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -264,6 +264,26 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> simulateTacticalScenario({
+    required String shipmentId,
+    String? weatherCondition,
+    double? trafficLevel,
+    double? speedModifier,
+  }) async {
+    try {
+      final result = await _apiService.simulateShipment(
+        shipmentId: shipmentId,
+        weatherCondition: weatherCondition,
+        trafficLevel: trafficLevel,
+        speedModifier: speedModifier,
+      );
+      return result;
+    } catch (e) {
+      _apiService.logToServer('ERROR', 'Tactical simulation failed', {'error': e.toString()});
+      rethrow;
+    }
+  }
+
   Future<void> toggleGlobalStop(bool stopped) async {
     final wasStopped = isGlobalStopped;
     isGlobalStopped = stopped;

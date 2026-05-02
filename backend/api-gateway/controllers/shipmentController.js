@@ -118,4 +118,58 @@ const analyzeShipment = async (req, res) => {
   }
 };
 
-export default { analyzeShipment, runAsyncAnalysis };
+const simulateShipment = async (req, res) => {
+  try {
+    const { shipment_id, weatherCondition, trafficLevel, speedModifier } = req.body;
+
+    const doc = await db().collection('shipments').doc(shipment_id).get();
+    if (!doc.exists) throw new Error('Shipment not found');
+
+    const shipment = doc.data();
+    const mode = shipment.vehicle_type || 'ROAD';
+
+    // 1. Prepare simulation context
+    let routeData = shipment.routeData || [];
+    if (routeData.length === 0) {
+      routeData = await mapsService.getRoute(shipment.origin, shipment.destination).catch(() => []);
+    }
+
+    // 2. Apply Simulation Overrides
+    const weatherData = {
+      condition: weatherCondition || (shipment.weatherData?.condition || 'Clear'),
+      temperature: shipment.weatherData?.temperature || 25,
+      humidity: shipment.weatherData?.humidity || 50
+    };
+
+    // 3. Call AI Service for High-Fidelity Simulation
+    const payload = {
+      shipment_id,
+      routeData,
+      weatherData,
+      newsData: shipment.newsData || [],
+      mode,
+      origin: shipment.origin,
+      destination: shipment.destination,
+      currentLocation: shipment.current_location || null,
+      // Pass simulation flags if AI service supports them (heuristics applied in logistics_service.py)
+      traffic_index_override: trafficLevel, 
+      speed_modifier: speedModifier
+    };
+
+    const rawAiResponse = await aiService.getPrediction(payload);
+    const aiResponse = sanitizeAiResponse(rawAiResponse);
+
+    // 4. Return results WITHOUT persisting to Firestore
+    res.json({ 
+      success: true, 
+      simulation: aiResponse,
+      is_simulated: true
+    });
+
+  } catch (error) {
+    console.error('[SIMULATION ERROR] %s:', req.body.shipment_id, error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export default { analyzeShipment, runAsyncAnalysis, simulateShipment };
