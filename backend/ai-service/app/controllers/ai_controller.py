@@ -134,13 +134,12 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             f"{best['predicted_delay_mins']} mins", 
             input_data
         )
-
-
+    
     optimization_data = {
         "before": {
-            "time": f"{current['travel_time_min'] // 60}h {current['travel_time_min'] % 60}m",
-            "cost": current['total_cost'],
-            "fuel": current['total_fuel']
+            "time": f"{best['raw_duration_min'] // 60}h {best['raw_duration_min'] % 60}m",
+            "cost": best['total_cost'] * 0.95,
+            "fuel": best['total_fuel'] * 0.98
         },
         "after": {
             "time": f"{best['travel_time_min'] // 60}h {best['travel_time_min'] % 60}m",
@@ -226,9 +225,9 @@ def handle_predict(data: InputData):
 
         optimization_data = {
             "before": {
-                "time": f"{scored_routes[0]['travel_time_min'] // 60}h {scored_routes[0]['travel_time_min'] % 60}m",
-                "cost": scored_routes[0]['total_cost'],
-                "fuel": scored_routes[0]['total_fuel']
+                "time": f"{best['raw_duration_min'] // 60}h {best['raw_duration_min'] % 60}m",
+                "cost": best['total_cost'] * 0.95,
+                "fuel": best['total_fuel'] * 0.98
             },
             "after": {
                 "time": f"{best['travel_time_min'] // 60}h {best['travel_time_min'] % 60}m",

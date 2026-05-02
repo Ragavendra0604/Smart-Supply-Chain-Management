@@ -287,6 +287,32 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  Future<void> injectScenarioIntoLiveRoute({
+    required String shipmentId,
+    required String weatherCondition,
+    required double trafficLevel,
+    required double speedModifier,
+  }) async {
+    try {
+      await _apiService.injectSimulation(
+        shipmentId: shipmentId,
+        weatherCondition: weatherCondition,
+        trafficLevel: trafficLevel,
+        speedModifier: speedModifier,
+      );
+      successMessage = 'Simulation scenario injected into live transit.';
+      _apiService.logToServer('INFO', 'Scenario injected', {
+        'shipmentId': shipmentId,
+        'weather': weatherCondition,
+        'speedModifier': speedModifier
+      });
+      notifyListeners();
+    } catch (e) {
+      errorMessage = 'Failed to inject scenario.';
+      _apiService.logToServer('ERROR', 'Scenario injection failed', {'error': e.toString()});
+    }
+  }
+
   void setSimulationSpeed(double value) {
     simulationSpeedMultiplier = value;
     notifyListeners();
@@ -528,7 +554,8 @@ class DashboardController extends ChangeNotifier {
     }
 
     // Final dynamic speed with slight natural jitter
-    final double targetSpeedKmH = (calculatedSpeedKmH * modifier) + 
+    final double injectedModifier = shipment.simulationSpeedModifier ?? 1.0;
+    final double targetSpeedKmH = (calculatedSpeedKmH * modifier * injectedModifier) + 
         (math.Random().nextDouble() * 4.0 - 2.0);
 
     final double intervalSeconds = AppConfig.simulationStepInterval.inMilliseconds / 1000.0;

@@ -145,17 +145,18 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
             relevant_news = [n for n in news_data if any(x in n.get('title','').lower() for x in ['accident', 'strike', 'protest', 'closed'])]
             news_penalty = min(len(relevant_news) * 0.15, 0.4)
 
-        # COMPOSITE SCORE (Safety First)
-        raw_risk_score = base_risk + weather_penalty + resource_penalty + news_penalty
-        risk_score = round(min(raw_risk_score, 1.0), 3)
-
+        # 4. FINAL LOGISTICS METRICS
+        travel_time_min = duration_min + predicted_delay_mins
+        risk_score = min(base_risk + weather_penalty + resource_penalty + news_penalty, 1.0)
+        
         processed_routes.append({
             "summary": route.get("summary", f"Route {i+1}"),
             "distance_km": dist_km,
-            "travel_time_min": duration_min,
+            "raw_duration_min": duration_min,
+            "travel_time_min": travel_time_min,
             "total_cost": total_cost,
             "total_fuel": total_fuel,
-            "risk_level": "LOW" if risk_score < 0.35 else "MEDIUM" if risk_score < 0.75 else "HIGH",
+            "risk_level": "HIGH" if risk_score > 0.6 else ("MEDIUM" if risk_score > 0.3 else "LOW"),
             "risk_score": risk_score,
             "predicted_delay_mins": predicted_delay_mins,
             "is_recommended": False,

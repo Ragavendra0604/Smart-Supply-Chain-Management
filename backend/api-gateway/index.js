@@ -393,49 +393,15 @@ app.post('/update-location', authMiddleware, async (req, res) => {
 /* NOTE: /test-db removed — unauthenticated Firestore writes are a security risk.
    Use GET /health for connectivity checks instead. */
 
-/* ---------------- APPLY OPTIMIZED ROUTE (PROTECTED) ---------------- */
-// Called by the Flutter "Apply Optimized Route" button.
-// Writes status = ROUTE_APPLIED and timestamps the action in Firestore.
-app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, async (req, res) => {
-  try {
-    const validation = validateShipmentLookup(req.params.shipment_id);
-    if (!validation.valid) {
-      return res.status(400).json({ success: false, errors: validation.errors });
-    }
+/* ---------------- SHIPMENT & SIMULATION ---------------- */
+// Aliases for legacy/external tools
+app.post('/apply-route', authMiddleware, shipmentController.applyRoute);
+app.post('/simulate-scenario', authMiddleware, shipmentController.simulateShipment);
 
-    const { shipment_id } = validation.value;
-    const shipmentRef = db().collection('shipments').doc(shipment_id);
-    const doc = await shipmentRef.get();
-
-    if (!doc.exists) {
-      return res.status(404).json({ success: false, error: 'Shipment not found' });
-    }
-
-    await shipmentRef.update({
-      status: 'ROUTE_APPLIED',
-      route_applied_at: new Date(),
-      updated_at: new Date()
-    });
-
-    // Publish event for downstream consumers (e.g. vehicle notification service)
-    await eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch((err) => {
-      // Don't fail the request if event publish fails — just log it
-      console.error('[APPLY-ROUTE] Event publish failed (non-fatal):', err.message);
-    });
-
-    sysLog('GATEWAY', 'INFO', `Route applied for ${shipment_id}`);
-
-    res.json({
-      success: true,
-      message: `Optimized route applied for ${shipment_id}`,
-      shipment_id,
-      status: 'ROUTE_APPLIED'
-    });
-  } catch (err) {
-    sysLog('GATEWAY', 'ERROR', 'Apply route failed', { error: err.message });
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
+// Standard Frontend Routes (ApiService.dart)
+app.post('/api/shipments/simulate', authMiddleware, shipmentController.simulateShipment);
+app.post('/inject-simulation', authMiddleware, shipmentController.injectSimulation);
+app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, shipmentController.applyRoute);
 
 /* ---------------- SIMULATOR CONTROLS ---------------- */
 app.post('/api/simulator/start', simulatorController.startSimulator);
@@ -445,7 +411,6 @@ app.post('/api/simulator/stop', simulatorController.stopSimulator);
 import systemController from './controllers/systemController.js';
 app.get('/api/system/status', systemController.getSystemStatus);
 app.post('/api/system/toggle-stop', authMiddleware, systemController.toggleGlobalStop);
-
 
 const PORT = process.env.PORT || 5000;
 

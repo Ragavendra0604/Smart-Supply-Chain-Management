@@ -139,38 +139,25 @@ const simulateShipment = async (req, res) => {
     const shipment = doc.data();
     const mode = shipment.vehicle_type || 'ROAD';
 
-    // 1. Prepare simulation context
     let routeData = shipment.routeData || [];
     if (routeData.length === 0) {
       routeData = await mapsService.getRoute(shipment.origin, shipment.destination).catch(() => []);
     }
 
-    // 2. Apply Simulation Overrides
     const weatherData = {
       condition: weatherCondition || (shipment.weatherData?.condition || 'Clear'),
-      temperature: shipment.weatherData?.temperature || 25,
-      humidity: shipment.weatherData?.humidity || 50
+      temperature: 25
     };
 
-    // 3. Call AI Service for High-Fidelity Simulation
-    const payload = {
+    // 3. AI Inference with Simulation Context
+    const aiResponse = await aiService.getPrediction({
       shipment_id,
       routeData,
       weatherData,
-      newsData: shipment.newsData || [],
+      traffic_level: trafficLevel || 1.0,
+      speed_modifier: speedModifier || 1.0,
       mode,
-      origin: shipment.origin,
-      destination: shipment.destination,
-      currentLocation: shipment.current_location || null,
-      // Pass simulation flags if AI service supports them (heuristics applied in logistics_service.py)
-      traffic_index_override: trafficLevel,
-      speed_modifier: speedModifier,
-      model_name: model_name
-    };
-
-    const rawAiResponse = await aiService.getPrediction(payload);
-    const aiResponse = sanitizeAiResponse(rawAiResponse);
-
+    });
     // 4. Return results WITHOUT persisting to Firestore
     res.json({
       success: true,
@@ -184,4 +171,61 @@ const simulateShipment = async (req, res) => {
   }
 };
 
-export default { analyzeShipment, runAsyncAnalysis, simulateShipment, performAnalysis };
+const applyRoute = async (req, res) => {
+  try {
+    const { shipment_id } = req.body;
+    if (!shipment_id) throw new Error('shipment_id is required');
+
+    const shipmentRef = db().collection('shipments').doc(shipment_id);
+    await shipmentRef.update({
+      status: 'ROUTE_APPLIED',
+      route_applied_at: new Date(),
+      updated_at: new Date()
+    });
+
+    eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch(() => {});
+
+    res.json({
+      success: true,
+      message: `Optimized route applied for ${shipment_id}`,
+      status: 'ROUTE_APPLIED'
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+const injectSimulation = async (req, res) => {
+  try {
+    const { shipment_id, weatherCondition, trafficLevel, speedModifier } = req.body;
+    if (!shipment_id) throw new Error('shipment_id is required');
+
+    const updateData = {
+      "weatherData.condition": weatherCondition,
+      "weatherData.traffic_level": trafficLevel,
+      "simulation_speed_modifier": speedModifier,
+      "updated_at": new Date()
+    };
+
+    await db().collection('shipments').doc(shipment_id).update(updateData);
+
+    eventManager.logToBigQuery(shipment_id, 'SCENARIO_INJECTED', {
+      weather: weatherCondition,
+      traffic: trafficLevel,
+      speed_mod: speedModifier
+    }).catch(() => {});
+
+    res.json({ success: true, message: 'Scenario injected into live transit' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+export default {
+  analyzeShipment,
+  runAsyncAnalysis,
+  simulateShipment,
+  performAnalysis,
+  applyRoute,
+  injectSimulation
+};

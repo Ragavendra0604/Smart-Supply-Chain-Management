@@ -176,6 +176,29 @@ class ApiService {
     return Map<String, dynamic>.from(body['simulation'] as Map);
   }
 
+  Future<void> injectSimulation({
+    required String shipmentId,
+    required String weatherCondition,
+    required double trafficLevel,
+    required double speedModifier,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/inject-simulation');
+    final response = await _client.post(
+      uri,
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'shipment_id': shipmentId,
+        'weatherCondition': weatherCondition,
+        'trafficLevel': trafficLevel,
+        'speedModifier': speedModifier,
+      }),
+    );
+
+    if (response.statusCode >= 400) {
+      throw Exception('Scenario injection failed');
+    }
+  }
+
   Future<void> createShipment({
     required String shipmentId,
     required String origin,

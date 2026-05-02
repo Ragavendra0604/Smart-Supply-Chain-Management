@@ -933,6 +933,25 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
     }
   }
 
+  Future<void> _injectScenario() async {
+    final controller = context.read<DashboardController>();
+    await controller.injectScenarioIntoLiveRoute(
+      shipmentId: widget.shipment.shipmentId,
+      weatherCondition: _weather,
+      trafficLevel: _trafficLevel,
+      speedModifier: _speedModifier,
+    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(controller.successMessage ?? 'Scenario injected'),
+          backgroundColor: AppTheme.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1191,6 +1210,24 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                       ],
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _useHeuristics ? null : _injectScenario,
+                  icon: const Icon(Icons.input_rounded, size: 18),
+                  label: const Text('INJECT INTO LIVE TRANSIT',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    elevation: 0,
+                  ),
                 ),
               ),
             ],
