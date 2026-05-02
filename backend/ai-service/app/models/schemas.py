@@ -5,8 +5,8 @@ class TacticalDecision(BaseModel):
     decision: str = Field(..., pattern="^(GO|REROUTE|NO_GO)$")
     sla_risk: bool
     confidence: int = Field(..., ge=0, le=100)
-    reason: str = Field(..., max_length=200)
-    action: str = Field(..., max_length=200)
+    reason: str = Field(..., max_length=500)
+    action: str = Field(..., max_length=300)
 
 class AIInsights(BaseModel):
     delay_probability: float

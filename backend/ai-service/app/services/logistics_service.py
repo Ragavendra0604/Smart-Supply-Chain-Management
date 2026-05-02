@@ -78,7 +78,6 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
             'day_of_week'
         ])
 
-        # Explicitly enforce column order to match check.py results exactly
         features = features[['traffic_level', 'weather_condition', 'distance_km', 'time_of_day', 'day_of_week']]
         
         prediction = ml_model.predict(features)[0]
@@ -324,7 +323,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
                 "decision": "GO | REROUTE | NO_GO",
                 "sla_risk": true | false,
                 "confidence": integer (0–100),
-                "reason": "4-5 short, precise sentences explaining key factors (risk, delay, traffic, vehicle, deadline)",
+                "reason": "4-5 short, precise sentences explaining key factors (risk, delay, traffic, vehicle, deadline). Keep under 300 characters.",
                 "action": "single clear operational instruction"
             }}
 
