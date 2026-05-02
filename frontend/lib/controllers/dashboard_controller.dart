@@ -298,12 +298,29 @@ class DashboardController extends ChangeNotifier {
 
   Future<void> stopLiveSimulation() async {
     final id = simulatingShipmentId;
-    isSimulating = false;
-    simulatingShipmentId = null;
-    notifyListeners();
+    final lastShipment = latestShipment;
+    
+    _stopSimulation(); // 1. Locally cancel timer and reset state
+    
+    if (id != null && lastShipment != null && lastShipment.currentLocation != null) {
+      // 2. Persist the final position before marking as STOPPED
+      try {
+        await _locationService.sendVehicleLocation(
+          shipmentId: id,
+          point: lastShipment.currentLocation!,
+          speedKmH: 0,
+        );
+      } catch (e) {
+        debugPrint('Final location sync failed: $e');
+      }
+    }
+
     try {
+      // 3. Sync with backend to mark as STOPPED
       await _apiService.stopBackendSimulator(shipmentId: id);
-    } catch (_) {}
+    } catch (_) {
+      // Non-fatal if backend sync fails
+    }
   }
 
   void toggleSimulation(Shipment targetShipment) async {

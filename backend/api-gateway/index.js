@@ -313,7 +313,12 @@ app.post('/update-location', authMiddleware, async (req, res) => {
     }
 
     if (isShipmentStopped) {
-      return res.status(403).json({ success: false, error: `Updates blocked: Shipment ${shipment_id} is STOPPED.` });
+      // Gracefully handle late-arriving telemetry after a stop command to avoid UI errors
+      return res.status(200).json({ 
+        success: true, 
+        message: `Shipment ${shipment_id} is already STOPPED. Update ignored.`,
+        is_stopped: true 
+      });
     }
 
     // --- 3. SMART THROTTLING LOGIC ---
