@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // PUBLIC ACCESS FOR MVP DEMO
+    match /shipments/{shipmentId} {
+      allow read, write: if true;
+    }
+    match /system/{document=**} {
+      allow read: if true;
+      allow write: if false; 
+    }
+  }
+}

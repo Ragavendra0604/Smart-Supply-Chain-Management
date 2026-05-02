@@ -226,4 +226,26 @@ class ApiService {
       debugPrint('Remote logging failed: $e');
     }
   }
+
+  Future<bool> fetchGlobalStopStatus() async {
+    try {
+      final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/system/status');
+      final response = await _client.get(uri, headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body['config']?['isGlobalStopped'] ?? false;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> toggleGlobalStop(bool stopped) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/system/toggle-stop');
+    await _client.post(
+      uri,
+      headers: await _getHeaders(),
+      body: jsonEncode({'stopped': stopped}),
+    );
+  }
 }
+

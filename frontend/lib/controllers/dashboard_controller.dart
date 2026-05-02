@@ -35,6 +35,7 @@ class DashboardController extends ChangeNotifier {
   bool isBootstrapping = true;
   bool isRefreshingAi = false;
   bool isSimulating = false;
+  bool isGlobalStopped = false;
   String? simulatingShipmentId;
   bool usingFirestore = false;
   String? errorMessage;
@@ -43,6 +44,7 @@ class DashboardController extends ChangeNotifier {
 
   StreamSubscription<Shipment>? _activeShipmentSubscription;
   Timer? _simulationTimer;
+  Timer? _systemCheckTimer;
   String? _lastHighRiskToken;
   int _simulationIndex = 0;
 
@@ -54,7 +56,14 @@ class DashboardController extends ChangeNotifier {
       await Future.wait([
         refreshShipments(selectFirstWhenMissing: true),
         fetchSystemStats(),
+        _checkSystemStatus(),
       ]);
+
+      // Start periodic system check
+      _systemCheckTimer?.cancel();
+      _systemCheckTimer = Timer.periodic(
+          const Duration(seconds: 10), (_) => _checkSystemStatus());
+
       if (activeShipmentId != null) {
         _bindShipment(activeShipmentId!);
         _apiService.logToServer('INFO', 'Dashboard bootstrapped',
@@ -75,7 +84,31 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
+  Future<void> _checkSystemStatus() async {
+    final wasStopped = isGlobalStopped;
+    isGlobalStopped = await _apiService.fetchGlobalStopStatus();
+
+    if (isGlobalStopped && !wasStopped) {
+      _stopEverythingLocally();
+    }
+
+    if (isGlobalStopped != wasStopped) {
+      notifyListeners();
+    }
+  }
+
+  void _stopEverythingLocally() {
+    isSimulating = false;
+    simulatingShipmentId = null;
+    _simulationTimer?.cancel();
+    _activeShipmentSubscription?.cancel();
+    errorMessage = '⚠️ GLOBAL SYSTEM STOP ACTIVE. All services paused.';
+    notifyListeners();
+  }
+
   Future<void> refreshShipments({bool selectFirstWhenMissing = false}) async {
+    if (isGlobalStopped) return;
+
     final shipments = await _apiService.fetchRecentShipments();
     recentShipments = shipments;
 
@@ -224,13 +257,19 @@ class DashboardController extends ChangeNotifier {
   Future<void> stopAllSimulations() async {
     isSimulating = false;
     simulatingShipmentId = null;
+    isGlobalStopped = true;
     notifyListeners();
     try {
-      // Calling without an ID triggers the 'Stop All' logic in the backend
-      await _apiService.stopBackendSimulator();
-      successMessage = 'All active simulations have been terminated.';
+      // 1. Locally stop everything
+      _stopEverythingLocally();
+
+      // 2. Persist Global Stop in Firestore via Backend
+      await _apiService.toggleGlobalStop(true);
+
+      successMessage =
+          'GLOBAL STOP: All simulations and background services terminated.';
     } catch (e) {
-      errorMessage = 'Failed to stop all services.';
+      errorMessage = 'Failed to stop all services globally.';
     } finally {
       notifyListeners();
     }
@@ -248,6 +287,11 @@ class DashboardController extends ChangeNotifier {
 
   void toggleSimulation(Shipment targetShipment) async {
     if (!AppConfig.enableSimulationControls) return;
+    if (isGlobalStopped) {
+      errorMessage = 'Cannot start simulation: Global Stop is active.';
+      notifyListeners();
+      return;
+    }
 
     if (isSimulating && simulatingShipmentId == targetShipment.shipmentId) {
       await stopLiveSimulation();
@@ -346,13 +390,17 @@ class DashboardController extends ChangeNotifier {
         _syncShipmentSummary(shipment);
         notifyListeners();
       },
-      onError: (_) {
+      onError: (e) {
+        debugPrint('🔥 FIREBASE STREAM ERROR: $e');
+        _apiService.logToServer('ERROR', 'Firebase Stream Failed', {'error': e.toString(), 'shipmentId': shipmentId});
+        
         usingFirestore = false;
         errorMessage =
             'Live stream unavailable. Falling back to backend polling.';
         activeShipmentStream =
             _apiService.watchShipment(shipmentId).asBroadcastStream();
         _activeShipmentSubscription = activeShipmentStream!.listen(
+
           (shipment) {
             latestShipment = shipment;
             lastUpdated = DateTime.now();
@@ -447,6 +495,7 @@ class DashboardController extends ChangeNotifier {
   void dispose() {
     _activeShipmentSubscription?.cancel();
     _simulationTimer?.cancel();
+    _systemCheckTimer?.cancel();
     super.dispose();
   }
 }

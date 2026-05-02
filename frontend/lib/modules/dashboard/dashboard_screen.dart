@@ -42,7 +42,16 @@ class DashboardScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                if (controller.isGlobalStopped) ...[
+                   _NotificationBar(
+                    message: 'SYSTEM HALTED: Global Stop Active',
+                    color: AppTheme.danger,
+                    onClose: () => controller.isGlobalStopped = false, // Allow local dismissal for testing
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 _SummaryStats(shipments: controller.recentShipments),
+
                 if (controller.errorMessage != null) ...[
                   const SizedBox(height: 16),
                   _NotificationBar(

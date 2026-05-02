@@ -358,6 +358,12 @@ app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, async (req,
 app.post('/api/simulator/start', simulatorController.startSimulator);
 app.post('/api/simulator/stop', simulatorController.stopSimulator);
 
+/* ---------------- SYSTEM CONTROLS ---------------- */
+import systemController from './controllers/systemController.js';
+app.get('/api/system/status', systemController.getSystemStatus);
+app.post('/api/system/toggle-stop', authMiddleware, systemController.toggleGlobalStop);
+
+
 const PORT = process.env.PORT || 5000;
 
 // --- BOOTSTRAP: Persistence Guard (Resume active simulations) ---

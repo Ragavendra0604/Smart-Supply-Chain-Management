@@ -51,8 +51,18 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         return
         
     shipment_data = shipment_snapshot.to_dict()
+    
+    # Global Stop Check
+    try:
+        sys_doc = db.collection("system").document("config").get()
+        if sys_doc.exists and sys_doc.to_dict().get("isGlobalStopped"):
+            logger.info("Skipping analysis: Global Stop is active.")
+            return
+    except Exception: pass
+
     if shipment_data.get("status") in ["STOPPED", "COMPLETED", "CANCELLED"]:
         return
+
     
     existing_ai = shipment_data.get("aiResponse", {})
     last_analyzed = existing_ai.get("last_analyzed")

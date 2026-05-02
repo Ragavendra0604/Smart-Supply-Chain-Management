@@ -20,8 +20,6 @@ const getNews = async (origin, destination) => {
 
     const articles = response.data.articles || [];
 
-
-
     const isRecent = (date) => {
       const hours = (Date.now() - new Date(date)) / (1000 * 60 * 60);
       return hours < 72;
@@ -51,7 +49,7 @@ const getNews = async (origin, destination) => {
 
       return isRecent(article.publishedAt) && hasLocation && hasKeyword;
     });
-    
+
     let finalArticles = filtered;
 
     if (finalArticles.length === 0) {

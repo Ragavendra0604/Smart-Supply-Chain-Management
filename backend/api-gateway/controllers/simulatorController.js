@@ -34,8 +34,15 @@ const startSimulator = async (req, res) => {
   }
 
   try {
+    // 0. GLOBAL STOP CHECK
+    const sysDoc = await db().collection('system').doc('config').get();
+    if (sysDoc.exists && sysDoc.data().isGlobalStopped) {
+      return res.status(403).json({ success: false, message: 'Simulation blocked: Global Stop is active' });
+    }
+
     // 1. DYNAMIC FETCH: Pull the truth from Firestore (No hardcoding)
     const shipmentDoc = await db().collection('shipments').doc(shipment_id).get();
+
     if (!shipmentDoc.exists) {
       return res.status(404).json({ success: false, message: 'Shipment record not found' });
     }
