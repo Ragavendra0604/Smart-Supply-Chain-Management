@@ -190,7 +190,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             "sla_risk":true/false,
             "confidence":0-100,
             "reason":"max 20 words",
-            "action":"one clear instruction"
+            "action":"rwo clear instruction"
             }}
 
             CONSTRAINTS:
