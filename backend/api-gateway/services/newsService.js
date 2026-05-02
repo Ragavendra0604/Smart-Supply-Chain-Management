@@ -1,6 +1,13 @@
 import axios from 'axios';
+import { cacheManager } from '../utils/cache.js';
+
+const NEWS_CACHE_TTL = 60 * 60 * 1000; // 60 minutes
 
 const getNews = async (origin, destination) => {
+  const cacheKey = `news:${origin.toLowerCase()}:${destination.toLowerCase()}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return cached;
+
   try {
     // SIMPLE & EFFECTIVE QUERY
     const query = `${origin} ${destination} transport`;
@@ -60,21 +67,25 @@ const getNews = async (origin, destination) => {
     }
 
     // Final fallback (never empty)
+    let result = [];
     if (!finalArticles || finalArticles.length === 0) {
-      return [
+      result = [
         {
           title: "No major logistics disruptions reported on this route",
           source: "System",
           publishedAt: new Date().toISOString()
         }
       ];
+    } else {
+      result = finalArticles.slice(0, 3).map(article => ({
+        title: article.title || "Unknown Article",
+        source: article.source?.name || "Unknown Source",
+        publishedAt: article.publishedAt
+      }));
     }
 
-    return finalArticles.slice(0, 3).map(article => ({
-      title: article.title || "Unknown Article",
-      source: article.source?.name || "Unknown Source",
-      publishedAt: article.publishedAt
-    }));
+    cacheManager.set(cacheKey, result, NEWS_CACHE_TTL);
+    return result;
 
   } catch (error) {
     console.error('News API Error:', error.message);
@@ -89,4 +100,4 @@ const getNews = async (origin, destination) => {
   }
 };
 
-export default { getNews };
+export default { getNews };

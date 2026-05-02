@@ -21,6 +21,8 @@ import { eventManager } from './services/eventService.js';
 import { loadSecrets } from './services/secretService.js';
 import mapsService from './services/mapsService.js';
 import { processIdempotentRequest } from './utils/idempotency.js';
+import { cacheManager } from './utils/cache.js';
+import { calculateDistance } from './utils/location.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -271,36 +273,69 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
 });
 
 
+
+// --- TELEMETRY THROTTLING CONFIG ---
+const TELEMETRY_MIN_DIST = 1000; // 1km
+const TELEMETRY_MAX_TIME = 120000; // 2 mins
+
 app.post('/update-location', authMiddleware, async (req, res) => {
   try {
     const idempotencyKey = req.headers['x-idempotency-key'];
     if (!idempotencyKey) {
       return res.status(400).json({ error: 'x-idempotency-key header required' });
     }
-    const { shipment_id, lat, lng, trigger_ai = true, current_place = "" } = req.body;
-    const result = await processIdempotentRequest(idempotencyKey, async () => {
-      // 1. Fast path: update location in Firestore instantly
-      const shipmentRef = db().collection('shipments').doc(shipment_id);
-      await shipmentRef.update({
-        current_location: { lat, lng },
-        current_place: current_place || "En route",
-        status: 'IN_TRANSIT',
-        updated_at: new Date()
-      });
 
-      // 2. Conditional AI Trigger (Checkpoint Logic)
-      // Only trigger heavy AI processing if requested (saves cost)
+    const { shipment_id, lat, lng, speed_kmh = 0, trigger_ai = true, current_place = "" } = req.body;
+
+    // --- SMART THROTTLING LOGIC ---
+    const cacheKey = `last_telemetry:${shipment_id}`;
+    const lastTelemetry = cacheManager.get(cacheKey);
+    const now = Date.now();
+
+    let shouldUpdateFirestore = true;
+    if (lastTelemetry) {
+      const dist = calculateDistance(lat, lng, lastTelemetry.lat, lastTelemetry.lng);
+      const timeElapsed = now - lastTelemetry.timestamp;
+
+      // Skip Firestore if it's a minor move and within time window
+      if (dist < TELEMETRY_MIN_DIST && timeElapsed < TELEMETRY_MAX_TIME && !trigger_ai) {
+        shouldUpdateFirestore = false;
+      }
+    }
+
+    const result = await processIdempotentRequest(idempotencyKey, async () => {
+      // 1. Conditional Firestore Path (Saves Cost)
+      if (shouldUpdateFirestore) {
+        const shipmentRef = db().collection('shipments').doc(shipment_id);
+        await shipmentRef.update({
+          current_location: { lat, lng },
+          speed_kmh,
+          current_place: current_place || "En route",
+          status: 'IN_TRANSIT',
+          updated_at: new Date()
+        });
+        
+        // Cache this as the "last significant update"
+        cacheManager.set(cacheKey, { lat, lng, timestamp: now }, TELEMETRY_MAX_TIME * 2);
+      }
+
+      // 2. AI Triggering (Checkpoint Logic)
       if (trigger_ai) {
         await eventManager.publishEvent('shipment.location_updated', { shipment_id, lat, lng });
       } else {
         console.log(`[TELEMETRY] Skipping AI for ${shipment_id} (Intermediate Point)`);
       }
 
-      // 3. Log telemetry to BigQuery
+      // 3. Log telemetry to BigQuery (Always log for high-fidelity audit trail, but we'll optimize BQ later)
       await eventManager.logToBigQuery(shipment_id, 'LOCATION_UPDATE', { lat, lng });
-      return { success: true, message: 'Location updated, AI analysis queued.' };
+
+      return { 
+        success: true, 
+        message: shouldUpdateFirestore ? 'Location updated in DB.' : 'Location buffered (minor move).',
+        ai_queued: trigger_ai
+      };
     });
-    // 202 Accepted: The request has been accepted for processing
+
     res.status(202).json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
