@@ -90,7 +90,9 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         mode,
         fuel_level=shipment_data.get("fuel_level", 100.0),
         vehicle_health=shipment_data.get("vehicle_health", "Good"),
-        news_data=news_data
+        news_data=news_data,
+        traffic_level=weather_data.get("traffic_level") or 1.0,
+        speed_modifier=shipment_data.get("simulation_speed_modifier") or 1.0
     )
     if not processed_routes: return
 
@@ -193,7 +195,9 @@ def handle_predict(data: InputData):
             mode,
             fuel_level=data.fuel_level if data.fuel_level is not None else 100.0,
             vehicle_health=data.vehicle_health or "Good",
-            news_data=data.newsData
+            news_data=data.newsData,
+            traffic_level=data.traffic_level or 1.0,
+            speed_modifier=data.speed_modifier or 1.0
         )
 
         if not scored_routes:

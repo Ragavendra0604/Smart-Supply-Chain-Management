@@ -158,6 +158,7 @@ const simulateShipment = async (req, res) => {
       speed_modifier: speedModifier || 1.0,
       mode,
     });
+
     // 4. Return results WITHOUT persisting to Firestore
     res.json({
       success: true,
@@ -209,13 +210,24 @@ const injectSimulation = async (req, res) => {
 
     await db().collection('shipments').doc(shipment_id).update(updateData);
 
+    // AI TRIGGER: Force re-analysis to refresh reasoning and metrics based on injected state
+    const analysisResult = await performAnalysis(shipment_id).catch(err => {
+      console.error('[INJECT-AI] Analysis trigger failed:', err.message);
+      return null;
+    });
+
     eventManager.logToBigQuery(shipment_id, 'SCENARIO_INJECTED', {
       weather: weatherCondition,
       traffic: trafficLevel,
-      speed_mod: speedModifier
+      speed_mod: speedModifier,
+      has_ai_feedback: !!analysisResult
     }).catch(() => {});
 
-    res.json({ success: true, message: 'Scenario injected into live transit' });
+    res.json({ 
+      success: true, 
+      message: 'Scenario injected and AI reasoning refreshed',
+      analysis: analysisResult 
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -27,6 +27,8 @@ class InputData(BaseModel):
     delivery_deadline: Optional[str] = None
     fuel_level: Optional[float] = 100.0
     vehicle_health: Optional[str] = "Good"
+    traffic_level: Optional[float] = 1.0
+    speed_modifier: Optional[float] = 1.0
     model_name: Optional[str] = "gemini-2.5-flash"
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD") -> float:
@@ -83,7 +85,8 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
 
 def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD", 
                          fuel_level: float = 100.0, vehicle_health: str = "Good", 
-                         news_data: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+                         news_data: List[Dict[str, Any]] = None,
+                         traffic_level: float = 1.0, speed_modifier: float = 1.0) -> List[Dict[str, Any]]:
     COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
     FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
     processed_routes = []
@@ -111,14 +114,29 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
 
         total_cost = round(dist_km * COST_PER_KM, 2)
         total_fuel = round(dist_km * FUEL_PER_KM, 1)
+        
+        # Base delay from ML model
         predicted_delay_mins = get_ml_delay_prediction(route, weather, mode)
+        
+        # --- OVERRIDE INJECTION ---
+        # Apply the tactical traffic level (What-if slider)
+        # If traffic_level > 1.0, we add proportional delay
+        if traffic_level > 1.0:
+            injected_traffic_delay = duration_min * (traffic_level - 1.0) * 0.5
+            predicted_delay_mins += injected_traffic_delay
+            
+        # Apply the tactical speed modifier (What-if slider)
+        # Speed modifier 0.5 means half speed (doubles duration)
+        if speed_modifier < 1.0:
+            slowdown_penalty = duration_min * (1.0 - speed_modifier)
+            predicted_delay_mins += slowdown_penalty
             
         # --- HOLISTIC RISK SCORING ENGINE ---
         # 1. Base Risk (Traffic/ML Delay)
         base_risk = 0.0
         if duration_min > 0:
             risk_ratio = predicted_delay_mins / duration_min
-            base_risk = risk_ratio * 2.0 # Scale 0.5 delay to 1.0 risk
+            base_risk = risk_ratio * 1.5 # Balanced scaling
         
         # 2. Weather Penalty
         weather_penalty = 0.0
@@ -217,6 +235,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             Deadline: {data.delivery_deadline or 'Flexible'}
             Fuel: {data.fuel_level}% | Health: {data.vehicle_health}
             Delay: {predicted_delay} | Risk: {risk_score}
+            TACTICAL STATE (What-If): Traffic Level={data.traffic_level}x | Speed Modifier={data.speed_modifier}x
 
             RULES:
             NO_GO if: Fuel <15 OR Health=CRITICAL OR (Risk>85 AND Priority=HIGH)
