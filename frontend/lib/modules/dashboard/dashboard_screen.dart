@@ -63,7 +63,10 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   const SizedBox(height: 16),
                 ],
-                _SummaryStats(shipments: controller.recentShipments),
+                 const SizedBox(height: 16),
+                 _SimulationSpeedController(controller: controller),
+                 const SizedBox(height: 24),
+                 _SummaryStats(shipments: controller.recentShipments),
 
                 if (controller.errorMessage != null) ...[
                   const SizedBox(height: 16),
@@ -468,6 +471,89 @@ class _ShipmentCard extends StatelessWidget {
       default:
         return AppTheme.textMuted;
     }
+  }
+}
+
+class _SimulationSpeedController extends StatelessWidget {
+  final DashboardController controller;
+  const _SimulationSpeedController({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.speed, color: AppTheme.primary, size: 20),
+                  SizedBox(width: 12),
+                  Text(
+                    'Simulation Speed',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: AppTheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${controller.simulationSpeedMultiplier.toStringAsFixed(1)}x',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: AppTheme.primary,
+              inactiveTrackColor: AppTheme.primary.withValues(alpha: 0.1),
+              thumbColor: AppTheme.primary,
+              overlayColor: AppTheme.primary.withValues(alpha: 0.2),
+              trackHeight: 4,
+            ),
+            child: Slider(
+              value: controller.simulationSpeedMultiplier,
+              min: 1.0,
+              max: 10.0,
+              divisions: 9,
+              onChanged: (value) => controller.setSimulationSpeed(value),
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Real-time (1x)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                Text('Accelerated (10x)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

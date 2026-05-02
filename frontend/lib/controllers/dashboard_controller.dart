@@ -43,6 +43,7 @@ class DashboardController extends ChangeNotifier {
   bool usingFirestore = false;
   String? errorMessage;
   String? successMessage;
+  double simulationSpeedMultiplier = 1.0;
   DateTime? lastUpdated;
 
   StreamSubscription<Shipment>? _activeShipmentSubscription;
@@ -284,6 +285,11 @@ class DashboardController extends ChangeNotifier {
       _apiService.logToServer('ERROR', 'Tactical simulation failed', {'error': e.toString()});
       rethrow;
     }
+  }
+
+  void setSimulationSpeed(double value) {
+    simulationSpeedMultiplier = value;
+    notifyListeners();
   }
 
   Future<void> toggleGlobalStop(bool stopped) async {
@@ -528,7 +534,7 @@ class DashboardController extends ChangeNotifier {
     final double intervalSeconds = AppConfig.simulationStepInterval.inMilliseconds / 1000.0;
     
     // Distance to cover in this interval (meters)
-    double distanceToCover = (targetSpeedKmH * 1000 / 3600) * intervalSeconds;
+    double distanceToCover = (targetSpeedKmH * 1000 / 3600) * intervalSeconds * simulationSpeedMultiplier;
     
     LatLng nextPoint = currentPoint;
     int nextIndex = _simulationIndex;
