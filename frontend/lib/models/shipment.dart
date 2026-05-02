@@ -18,6 +18,7 @@ class Shipment {
     required this.createdAt,
     required this.updatedAt,
     this.speedKmH = 0,
+    this.currentStepIndex = 0,
   });
 
   final String id;
@@ -33,6 +34,7 @@ class Shipment {
   final DateTime? createdAt;
   final DateTime? updatedAt;
   final double speedKmH;
+  final int currentStepIndex;
 
   Shipment copyWith({
     String? id,
@@ -48,6 +50,7 @@ class Shipment {
     DateTime? createdAt,
     DateTime? updatedAt,
     double? speedKmH,
+    int? currentStepIndex,
   }) {
     return Shipment(
       id: id ?? this.id,
@@ -63,6 +66,7 @@ class Shipment {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       speedKmH: speedKmH ?? this.speedKmH,
+      currentStepIndex: currentStepIndex ?? this.currentStepIndex,
     );
   }
 
@@ -145,6 +149,7 @@ class Shipment {
       createdAt: dateTimeFromDynamic(data['created_at']),
       updatedAt: dateTimeFromDynamic(data['updated_at']),
       speedKmH: numValue(data['speed_kmh']).toDouble(),
+      currentStepIndex: numValue(data['current_step_index']).toInt(),
     );
   }
 }

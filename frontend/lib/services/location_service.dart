@@ -11,12 +11,14 @@ class LocationService {
     required String shipmentId,
     required LatLng point,
     double speedKmH = 0,
+    int currentStepIndex = 0,
   }) {
     return _apiService.updateLocation(
       shipmentId: shipmentId,
       lat: point.latitude,
       lng: point.longitude,
       speedKmH: speedKmH,
+      currentStepIndex: currentStepIndex,
     );
   }
 }

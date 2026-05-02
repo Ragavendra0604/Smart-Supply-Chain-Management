@@ -285,7 +285,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'x-idempotency-key header required' });
     }
 
-    const { shipment_id, lat, lng, speed_kmh = 0, trigger_ai = true, current_place = "" } = req.body;
+    const { shipment_id, lat, lng, speed_kmh = 0, current_step_index = 0, trigger_ai = true, current_place = "" } = req.body;
 
     // --- 1. GLOBAL STOP CIRCUIT BREAKER ---
     let isGlobalStopped = cacheManager.get('sys:global_stop');
@@ -341,6 +341,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
         await shipmentRef.update({
           current_location: { lat, lng },
           speed_kmh,
+          current_step_index,
           current_place: current_place || "En route",
           status: 'IN_TRANSIT',
           updated_at: new Date()

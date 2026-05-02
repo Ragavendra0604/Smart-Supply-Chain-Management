@@ -107,6 +107,7 @@ class ApiService {
     required double lat,
     required double lng,
     double speedKmH = 0,
+    int currentStepIndex = 0,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/update-location');
     // final response = await _client.post(
@@ -122,6 +123,7 @@ class ApiService {
           'lat': lat,
           'lng': lng,
           'speed_kmh': speedKmH,
+          'current_step_index': currentStepIndex,
         }),
       );
 

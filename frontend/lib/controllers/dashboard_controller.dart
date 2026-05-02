@@ -309,6 +309,7 @@ class DashboardController extends ChangeNotifier {
           shipmentId: id,
           point: lastShipment.currentLocation!,
           speedKmH: 0,
+          currentStepIndex: lastShipment.currentStepIndex,
         );
       } catch (e) {
         debugPrint('Final location sync failed: $e');
@@ -376,7 +377,7 @@ class DashboardController extends ChangeNotifier {
     selectShipment(targetShipment.shipmentId);
 
     // If already at or near destination, restart from beginning for the demo
-    int startIndex = targetShipment.currentRouteIndex;
+    int startIndex = targetShipment.currentStepIndex;
     if (startIndex >= targetShipment.route.path.length - 2) {
       debugPrint(
           'Restarting simulation from beginning for ${targetShipment.shipmentId}');
@@ -550,6 +551,7 @@ class DashboardController extends ChangeNotifier {
         shipmentId: targetId,
         point: nextPoint,
         speedKmH: updatedShipment.speedKmH,
+        currentStepIndex: _simulationIndex,
       );
       if (isDestination) {
         _stopSimulation();
