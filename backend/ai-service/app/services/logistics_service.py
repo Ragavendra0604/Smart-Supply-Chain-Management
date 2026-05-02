@@ -200,16 +200,13 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             """
             
         try:
-            # Use the canonical model name for Vertex AI if needed, 
-            # though gemini-1.5-flash should work in most regions.
-            model_name = "gemini-1.5-flash"
+            model_name = "gemini-2.5-flash"
             
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
                 config={
                     'response_mime_type': 'application/json',
-                    'temperature': 0.1, # Keep it deterministic
                 }
             )
             
