@@ -20,25 +20,6 @@ class DashboardMap extends StatefulWidget {
 class _DashboardMapState extends State<DashboardMap> {
   GoogleMapController? _mapController;
   String? _lastViewportKey;
-  BitmapDescriptor? _truckIcon;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadTruckIcon();
-  }
-
-  Future<void> _loadTruckIcon() async {
-    final icon = await BitmapDescriptor.asset(
-      const ImageConfiguration(size: Size(48, 48)),
-      'assets/images/truck.png',
-    );
-    if (mounted) {
-      setState(() {
-        _truckIcon = icon;
-      });
-    }
-  }
 
   @override
   void didUpdateWidget(covariant DashboardMap oldWidget) {
@@ -62,7 +43,7 @@ class _DashboardMapState extends State<DashboardMap> {
         _syncCamera(forceFit: true);
       },
       myLocationButtonEnabled: false,
-      zoomControlsEnabled: true, // Enabled for better UX
+      zoomControlsEnabled: true, 
       compassEnabled: true,
       mapToolbarEnabled: true,
       trafficEnabled: true,
@@ -82,32 +63,21 @@ class _DashboardMapState extends State<DashboardMap> {
   }
 
   Set<Marker> _buildMarkers(List<LatLng> path, LatLng current) {
-    double rotation = 0;
-    
-    // Calculate rotation if we have path data
-    if (path.isNotEmpty) {
-      final index = widget.shipment.currentRouteIndex;
-      if (index > 0 && index < path.length) {
-        rotation = MapUtils.calculateBearing(path[index - 1], path[index]);
-      } else if (index == 0 && path.length > 1) {
-        rotation = MapUtils.calculateBearing(path[0], path[1]);
-      }
-    }
-
     final markers = <Marker>{
       Marker(
         markerId: const MarkerId('vehicle'),
         position: current,
-        rotation: rotation,
-        anchor: const Offset(0.5, 0.5),
-        icon: _truckIcon ?? BitmapDescriptor.defaultMarkerWithHue(
-          riskMarkerHue(widget.shipment.riskLevel),
+        // Using a high-visibility Blue pin by default, or Risk-Color if high
+        icon: BitmapDescriptor.defaultMarkerWithHue(
+          widget.shipment.riskLevel == 'LOW' 
+            ? BitmapDescriptor.hueBlue 
+            : riskMarkerHue(widget.shipment.riskLevel),
         ),
         infoWindow: InfoWindow(
           title: 'Shipment ${widget.shipment.shipmentId}',
-          snippet: widget.shipment.currentPlace,
+          snippet: '${widget.shipment.currentPlace} (${widget.shipment.speedKmH.toInt()} km/h)',
         ),
-        zIndexInt: 2,
+        zIndexInt: 5, // Keep pin on top
       ),
     };
 

@@ -36,7 +36,7 @@ const getRoute = async (origin, destination) => {
     return response.data.routes.map((route, index) => {
       const leg = route.legs[0];
       
-      // Extract landmarks from instructions for high-fidelity simulation
+      // 1. EXTRACT LANDMARKS FROM STEPS
       const landmarks = leg.steps.map(step => {
         const cleanName = step.html_instructions.replace(/<[^>]*>?/gm, '');
         return {
@@ -44,6 +44,16 @@ const getRoute = async (origin, destination) => {
           lat: step.start_location.lat,
           lng: step.start_location.lng
         };
+      });
+
+      // 2. HIGH-RESOLUTION PATH EXTRACTION
+      let fullPath = [];
+      leg.steps.forEach(step => {
+        const decodedStep = polyline.decode(step.polyline.points).map(([lat, lng]) => ({
+          lat,
+          lng
+        }));
+        fullPath = fullPath.concat(decodedStep);
       });
 
       return {
@@ -56,19 +66,23 @@ const getRoute = async (origin, destination) => {
         traffic_duration: leg.duration_in_traffic?.text || leg.duration.text,
         traffic_duration_seconds: leg.duration_in_traffic?.value || leg.duration.value,
         landmarks: landmarks,
-        path: polyline.decode(route.overview_polyline.points).map(([lat, lng]) => ({
-          lat,
-          lng
-        })),
-        source: 'google_maps_api'
+        path: fullPath,
+        source: 'google_maps_api_high_res'
       };
     });
   } catch (error) {
     console.error(`[MAPS SERVICE ERROR] Critical API Failure: ${error.message}.`);
     
-    // FALLBACK: Instead of 'random' California routes, we return a minimal 
-    // structure that the simulator can handle without jumping across the globe.
-    // The real fix is to ensure GOOGLE_MAPS_API_KEY is active and has Directions API enabled.
+    // Attempt to extract coordinates from strings for a minimal fallback path
+    const extractCoords = (str) => {
+      const parts = str.split(',').map(p => parseFloat(p.trim()));
+      return (parts.length === 2 && !isNaN(parts[0])) ? { lat: parts[0], lng: parts[1] } : null;
+    };
+
+    const start = extractCoords(origin);
+    const end = extractCoords(destination);
+    const fallbackPath = (start && end) ? [start, end] : [];
+
     return [{
       route_id: `route_fallback`,
       summary: "Direct Path (API Fallback)",
@@ -79,10 +93,10 @@ const getRoute = async (origin, destination) => {
       traffic_duration: "Calculating...",
       traffic_duration_seconds: 0,
       landmarks: [
-        { name: `Start: ${origin}`, lat: 0, lng: 0 },
-        { name: `End: ${destination}`, lat: 0, lng: 0 }
+        { name: `Start`, lat: start?.lat || 0, lng: start?.lng || 0 },
+        { name: `End`, lat: end?.lat || 0, lng: end?.lng || 0 }
       ],
-      path: [], // Return empty path so simulation doesn't 'jump' to SF/LA
+      path: fallbackPath,
       source: 'error_fallback'
     }];
   }
