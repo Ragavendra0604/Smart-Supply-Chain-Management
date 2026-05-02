@@ -366,34 +366,11 @@ app.post('/api/system/toggle-stop', authMiddleware, systemController.toggleGloba
 
 const PORT = process.env.PORT || 5000;
 
-// --- BOOTSTRAP: Persistence Guard (Resume active simulations) ---
+// --- BOOTSTRAP: Persistence Guard (Stateless - No resume needed) ---
 const bootstrap = async () => {
-  try {
-    console.log('🔄 [BOOTSTRAP] Checking for interrupted simulations...');
-    const snapshot = await db().collection('shipments')
-      .where('status', '==', 'IN_TRANSIT')
-      .limit(10) // Limit to avoid burst on start
-      .get();
-
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      // Only resume if it hasn't been analyzed recently (likely interrupted)
-      const lastUpdate = data.last_analyzed_at?.toDate() || new Date(0);
-      const diff = Date.now() - lastUpdate.getTime();
-
-      if (diff > 300000) { // 5 minutes of silence
-        console.log(`📡 [BOOTSTRAP] Resuming simulation for: ${doc.id}`);
-        // We don't have the full original request body, so we use a minimal re-trigger
-        // This is a "Best Effort" resume.
-        import('./controllers/simulatorController.js').then(m => {
-          m.default.startSimulator({ body: { shipment_id: doc.id, steps: 50, interval_ms: 3000 } }, { json: () => { } });
-        });
-      }
-    }
-  } catch (err) {
-    console.error('❌ [BOOTSTRAP ERROR]:', err.message);
-  }
+  console.log('🔄 [BOOTSTRAP] System ready. Background loops disabled for cost optimization.');
 };
+
 
 // Bootstrap Application: Load Secrets then Start Server
 const startApp = async () => {
