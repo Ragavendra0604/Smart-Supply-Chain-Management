@@ -46,15 +46,17 @@ const getRoute = async (origin, destination) => {
         };
       });
 
-      // 2. HIGH-RESOLUTION PATH EXTRACTION
-      let fullPath = [];
-      leg.steps.forEach(step => {
-        const decodedStep = polyline.decode(step.polyline.points).map(([lat, lng]) => ({
-          lat,
-          lng
-        }));
-        fullPath = fullPath.concat(decodedStep);
-      });
+      // 2. PATH EXTRACTION (High-Resolution Overview)
+      const fullPath = polyline.decode(route.overview_polyline.points).map(([lat, lng]) => ({
+        lat,
+        lng
+      }));
+      
+      // Ensure the exact start and end coordinates are included
+      if (fullPath.length > 0) {
+        fullPath[0] = { lat: leg.start_location.lat, lng: leg.start_location.lng };
+        fullPath[fullPath.length - 1] = { lat: leg.end_location.lat, lng: leg.end_location.lng };
+      }
 
       return {
         route_id: `route_${index}`,
@@ -67,7 +69,7 @@ const getRoute = async (origin, destination) => {
         traffic_duration_seconds: leg.duration_in_traffic?.value || leg.duration.value,
         landmarks: landmarks,
         path: fullPath,
-        source: 'google_maps_api_high_res'
+        source: 'google_maps_api_overview'
       };
     });
   } catch (error) {

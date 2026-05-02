@@ -28,11 +28,12 @@ const getPrediction = async (data) => {
     // Production-Grade: Fetch ID Token for Service-to-Service Auth
     let authHeaders = {};
     try {
-      const audience = new URL(aiBaseUrl).origin;
+      const audience = new URL(url).origin;
       const client = await auth.getIdTokenClient(audience);
       authHeaders = await client.getRequestHeaders();
     } catch (authError) {
-      console.warn(`[AI AUTH WARNING] ID Token fetch failed. Ensure Gateway has 'roles/run.invoker' on AI Service.`);
+      console.warn(`[AI AUTH WARNING] ID Token fetch failed for ${url}: ${authError.message}`);
+      // In production Cloud Run, this is a fatal auth configuration issue
     }
 
     const response = await aiClient.post(

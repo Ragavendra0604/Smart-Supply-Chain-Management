@@ -48,7 +48,8 @@ const performAnalysis = async (shipment_id) => {
     weatherData,
     newsData,
     mode,
-    source: shipment.origin,
+    origin: shipment.origin,
+    destination: shipment.destination,
     currentLocation: shipment.current_location || null
   };
 
