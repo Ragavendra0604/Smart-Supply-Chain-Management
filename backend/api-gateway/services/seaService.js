@@ -2,11 +2,9 @@ import axios from 'axios';
 
 /**
  * MarineTraffic / Spire AIS integration
- * For MVP: Fetches vessel position via MMSI (Maritime Mobile Service Identity)
  */
 const getVesselStatus = async (mmsi) => {
   try {
-    // Demo Mock: Resilient logistics system must handle ship delays (port congestion)
     if (!process.env.MARINE_API_KEY) {
       return {
         mode: 'SEA',
@@ -33,4 +31,26 @@ const getVesselStatus = async (mmsi) => {
   }
 };
 
-export default { getVesselStatus };
+/**
+ * MOCK: Strategic Maritime Route Logic
+ * Provides multi-modal sea paths for demo purposes.
+ */
+const getRoute = async (origin, destination) => {
+  console.log(`[SEA_SERVICE] Mocking maritime path: ${origin} -> ${destination}`);
+  
+  return [{
+    summary: "Standard Maritime Shipping Lane",
+    distance: "12,800 km",
+    duration: "14 days",
+    distance_meters: 12800000,
+    duration_seconds: 1209600,
+    total_cost: 3500.00,
+    total_fuel: 18000.0,
+    path: [
+      { lat: 1.3521, lng: 103.8198 }, // Singapore
+      { lat: 33.7739, lng: -118.2437 } // Long Beach
+    ]
+  }];
+};
+
+export default { getVesselStatus, getRoute };

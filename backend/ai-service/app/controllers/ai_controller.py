@@ -127,7 +127,7 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             delivery_deadline=shipment_data.get("delivery_deadline"),
             fuel_level=shipment_data.get("fuel_level", 100.0),
             vehicle_health=shipment_data.get("vehicle_health", "Good"),
-            model_name=shipment_data.get("ai_config", {}).get("model") or "gemini-2.5-flash" # Use preferred or default
+            model_name=shipment_data.get("ai_config", {}).get("model") or "gemini-2.5-flash"
         )
         insight = generate_logistics_insight(
             best['risk_score'], 

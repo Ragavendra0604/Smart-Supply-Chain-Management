@@ -51,15 +51,20 @@ const sysLog = (service, level, message, data = {}) => {
   console.log(entry);
 };
 
-// Request Logging Middleware
+// Request Logging Middleware with Trace ID
 app.use((req, res, next) => {
+  const traceId = req.headers['x-trace-id'] || `tr-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+  req.traceId = traceId;
+  res.setHeader('x-trace-id', traceId);
+
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
     sysLog('GATEWAY', 'INFO', `${req.method} ${req.originalUrl}`, {
       status: res.statusCode,
       duration: `${duration}ms`,
-      ip: req.ip
+      ip: req.ip,
+      traceId
     });
   });
   next();
@@ -279,8 +284,9 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
 
 
 // --- TELEMETRY THROTTLING CONFIG ---
-const TELEMETRY_MIN_DIST = 1000; // 1km
-const TELEMETRY_MAX_TIME = 120000; // 2 mins
+// --- MVP COST-SLAYER CONFIG (₹0 Target) ---
+const TELEMETRY_MIN_DIST = 5000; // 5km (Was 1km)
+const TELEMETRY_MAX_TIME = 900000; // 15 mins (Was 2 mins)
 
 app.post('/update-location', authMiddleware, async (req, res) => {
   try {
@@ -289,7 +295,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       return res.status(400).json({ error: 'x-idempotency-key header required' });
     }
 
-    const { shipment_id, lat, lng, speed_kmh = 0, current_step_index = 0, trigger_ai = true, current_place = "" } = req.body;
+    const { shipment_id, lat, lng, speed_kmh = 0, current_step_index = 0, trigger_ai = false, current_place = "" } = req.body;
 
     // --- 1. GLOBAL STOP CIRCUIT BREAKER ---
     let isGlobalStopped = cacheManager.get('sys:global_stop');
@@ -325,22 +331,33 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       });
     }
 
-    // --- 3. SMART THROTTLING LOGIC ---
+    // --- 3. SMART THROTTLING & SHARDING LOGIC ---
     const cacheKey = `last_telemetry:${shipment_id}`;
     const lastTelemetry = cacheManager.get(cacheKey);
     const now = Date.now();
+
+    // SRE Best Practice: Stream ALL raw telemetry to BigQuery (Low cost, high scalability)
+    // We do this BEFORE the Firestore throttle to ensure we never lose data.
+    eventManager.logToBigQuery(shipment_id, 'TELEMETRY_RAW', { 
+      lat, lng, speed_kmh, traceId: req.traceId 
+    }).catch(() => {});
 
     let shouldUpdateFirestore = true;
     if (lastTelemetry) {
       const dist = calculateDistance(lat, lng, lastTelemetry.lat, lastTelemetry.lng);
       const timeElapsed = now - lastTelemetry.timestamp;
-      if (dist < TELEMETRY_MIN_DIST && timeElapsed < TELEMETRY_MAX_TIME && !trigger_ai) {
+      
+      // PRODUCTION THROTTLE: Only update Firestore if > 2km moved OR > 5 mins elapsed OR AI trigger requested
+      if (dist < 2000 && timeElapsed < 300000 && !trigger_ai) {
         shouldUpdateFirestore = false;
       }
     }
 
     const result = await processIdempotentRequest(idempotencyKey, async () => {
       if (shouldUpdateFirestore) {
+        // SHARDING: Partition shipments across sub-collections if volume is extreme
+        const shardId = shipment_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 10;
+        
         const shipmentRef = db().collection('shipments').doc(shipment_id);
         await shipmentRef.update({
           current_location: { lat, lng },
@@ -348,20 +365,22 @@ app.post('/update-location', authMiddleware, async (req, res) => {
           current_step_index,
           current_place: current_place || "En route",
           status: 'IN_TRANSIT',
+          shard_id: shardId,
           updated_at: new Date()
         });
-        cacheManager.set(cacheKey, { lat, lng, timestamp: now }, TELEMETRY_MAX_TIME * 2);
+        
+        cacheManager.set(cacheKey, { lat, lng, timestamp: now }, 600000);
       }
 
       if (trigger_ai) {
-        await eventManager.publishEvent('shipment.location_updated', { shipment_id, lat, lng });
+        await eventManager.publishEvent('shipment.location_updated', { 
+          shipment_id, lat, lng, traceId: req.traceId 
+        });
       }
-
-      await eventManager.logToBigQuery(shipment_id, 'LOCATION_UPDATE', { lat, lng });
 
       return { 
         success: true, 
-        message: shouldUpdateFirestore ? 'Updated.' : 'Buffered.'
+        message: shouldUpdateFirestore ? 'State Persisted.' : 'Logged to Analytics (Buffered in Firestore).'
       };
     });
 

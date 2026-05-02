@@ -2,11 +2,9 @@ import axios from 'axios';
 
 /**
  * OpenSky Network / FlightAware integration
- * For MVP: Fetches active flights by callsign or geographic bounding box
  */
 const getFlightStatus = async (flightNumber) => {
   try {
-    // Mocking real-world API call for demo if no key provided
     if (!process.env.FLIGHT_API_KEY) {
       return {
         mode: 'AIR',
@@ -39,4 +37,26 @@ const getFlightStatus = async (flightNumber) => {
   }
 };
 
-export default { getFlightStatus };
+/**
+ * MOCK: Strategic Air Route Logic
+ * Provides multi-modal flight paths for demo purposes.
+ */
+const getRoute = async (origin, destination) => {
+  console.log(`[AIR_SERVICE] Mocking flight path: ${origin} -> ${destination}`);
+  
+  return [{
+    summary: "Transcontinental Flight Corridor",
+    distance: "5,420 km",
+    duration: "6h 45m",
+    distance_meters: 5420000,
+    duration_seconds: 24300,
+    total_cost: 1250.00,
+    total_fuel: 4200.0,
+    path: [
+      { lat: 37.7749, lng: -122.4194 }, // Start
+      { lat: 40.7128, lng: -74.0060 }  // End
+    ]
+  }];
+};
+
+export default { getFlightStatus, getRoute };

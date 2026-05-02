@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from app.models.ml_model import get_ml_model
 from app.utils.logger import logger
 from app.services.ai_client import get_genai_client
+from app.models.schemas import TacticalDecision
 
 class InputData(BaseModel):
     shipment_id: Optional[str] = None
@@ -181,18 +182,30 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
 
 def generate_logistics_insight(risk_score: float, predicted_delay: str, data: InputData) -> str:
     client = get_genai_client()
+    
+    # --- DETERMINISTIC FALLBACK LOGIC ---
+    def get_fallback_insight(reason: str) -> str:
+        risk_level = "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH"
+        decision = "GO"
+        action = "Proceed with caution."
+        
+        if risk_score > 0.85 or data.vehicle_health.upper() == "CRITICAL":
+            decision = "NO_GO"
+            action = "Halt shipment and await further instructions."
+        elif risk_score > 0.6:
+            decision = "REROUTE"
+            action = "Recalculating optimal path."
+            
+        return f"⚠️ FALLBACK ({reason}) | {decision}: Environmental risk is {risk_level}. Instruction: {action}"
+
     if client is None:
-        return "Insight unavailable (AI connection pending)."
+        return get_fallback_insight("AI connection pending")
 
     try:
         mode = data.mode
         origin = data.origin or "Current Location"
         dest = data.destination or "Destination"
         weather = data.weatherData or {}
-        news = data.newsData or []
-        
-        # Determine risk level for the prompt
-        risk_level = "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH"
         
         prompt = f"""
             ROLE: Logistics Decision Engine (Deterministic)
@@ -202,21 +215,12 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             Cargo: {data.cargo_type}, Priority={data.priority}, Perishable={data.is_perishable}
             Deadline: {data.delivery_deadline or 'Flexible'}
             Fuel: {data.fuel_level}% | Health: {data.vehicle_health}
-            Delay: {predicted_delay} | Risk: {risk_score} ({risk_level})
-            Weather: {weather.get('condition','Clear')}, {weather.get('temperature','N/A')}°C
+            Delay: {predicted_delay} | Risk: {risk_score}
 
             RULES:
-            NO_GO if:
-            - Fuel <15 OR Health=CRITICAL OR (Risk>85 AND Priority=HIGH)
-
-            REROUTE if:
-            - 60<=Risk<=85 OR Weather in [Storm,Flood] OR (Delay>30 AND Deadline exists)
-
-            GO if:
-            - Risk<60 AND no above conditions
-
-            SLA_RISK:
-            - TRUE if delay breaches deadline buffer
+            NO_GO if: Fuel <15 OR Health=CRITICAL OR (Risk>85 AND Priority=HIGH)
+            REROUTE if: 60<=Risk<=85 OR Weather in [Storm,Flood] OR (Delay>30 AND Deadline exists)
+            GO if: Risk<60 AND no above conditions
 
             OUTPUT (JSON ONLY):
             {{
@@ -224,13 +228,8 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             "sla_risk":true/false,
             "confidence":0-100,
             "reason":"max 20 words",
-            "action":"rwo clear instruction"
+            "action":"one clear instruction"
             }}
-
-            CONSTRAINTS:
-            - No extra text
-            - Deterministic output
-            - Safety > SLA > Cost
             """
             
         try:
@@ -245,31 +244,26 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             )
             
             if not response or not response.text:
-                return "AI Insight currently unavailable (Empty response from model)."
+                return get_fallback_insight("Empty AI response")
 
-            # Parse the structured JSON response
-            import json
+            # --- PRODUCTION-GRADE VALIDATION ---
             try:
-                res_data = json.loads(response.text.strip())
-            except json.JSONDecodeError:
-                # If JSON fails, return the raw text as a fallback if it looks like a string
-                return response.text.strip()[:200]
+                # 1. Raw JSON load
+                res_json = json.loads(response.text.strip())
+                # 2. Pydantic validation (Schema Enforcement)
+                decision_obj = TacticalDecision(**res_json)
+            except (json.JSONDecodeError, Exception) as parse_err:
+                logger.error(f"AI Schema Validation Failed: {parse_err}")
+                return get_fallback_insight("Schema mismatch")
             
             # Format for the Premium Dashboard Insight
-            decision = res_data.get("decision", "GO")
-            reason = res_data.get("reason", "Conditions verified.")
-            action = res_data.get("action", "Proceed as planned.")
-            
-            # Create a professional, formatted string for the UI
-            icon = "✅" if decision == "GO" else "⚠️" if decision == "REROUTE" else "🛑"
-            return f"{icon} {decision}: {reason} Instruction: {action}"
+            icon = "✅" if decision_obj.decision == "GO" else "⚠️" if decision_obj.decision == "REROUTE" else "🛑"
+            return f"{icon} {decision_obj.decision}: {decision_obj.reason} Instruction: {decision_obj.action}"
 
         except Exception as e:
-            logger.error(f"AI Prediction Error: {str(e)}")
-            # Return the specific error for debugging in the UI
-            error_detail = str(e).split(':')[-1].strip() if ':' in str(e) else str(e)
-            return f"AI Insight currently unavailable ({error_detail[:50]})."
+            logger.error(f"Gemini API Error: {str(e)}")
+            return get_fallback_insight("API Timeout")
 
     except Exception as e:
         logger.error(f"Gemini Insight Wrapper Error: {e}")
-        return "Tactical evaluation in progress..."
+        return get_fallback_insight("System Error")

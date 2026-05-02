@@ -1,5 +1,6 @@
 import { db } from '../config/firebase.js';
 import mapsService from '../services/mapsService.js';
+import routeService from '../services/routeService.js';
 import weatherService from '../services/weatherService.js';
 import newsService from '../services/newsService.js';
 import aiService from '../services/aiService.js';
@@ -30,10 +31,10 @@ const performAnalysis = async (shipment_id) => {
   }
 
   // 2. PARALLEL ENRICHMENT ENGINE
-  // Simultaneously fetch Routes (with alternatives), Weather, and News
+
   const [routes, weather, news] = await Promise.all([
-    mapsService.getRoute(shipment.origin, shipment.destination).catch(err => {
-      console.error('[MAPS ERROR]', err.message);
+    routeService.getRoute(shipment.origin, shipment.destination, mode).catch(err => {
+      console.error('[ROUTE ERROR]', err.message);
       return [];
     }),
     weatherService.getWeather(shipment.destination).catch(() => ({ condition: 'Clear', temperature: 25 })),
@@ -61,7 +62,7 @@ const performAnalysis = async (shipment_id) => {
 
   // 4. DATA ENRICHMENT & MAPPING (Alignment with Senior Architect Requirements)
   const bestRoute = aiResponse.all_routes?.find(r => r.is_recommended) || aiResponse.all_routes?.[0] || routes[0] || {};
-  
+
   const enriched_data = {
     traffic: {
       duration_with_traffic: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
@@ -98,13 +99,13 @@ const performAnalysis = async (shipment_id) => {
     shipment_id,
     risk_level: aiResponse.risk_level,
     mode
-  }).catch(() => {});
+  }).catch(() => { });
 
   eventManager.logToBigQuery(shipment_id, 'SHIPMENT_INITIALIZED', {
     risk: aiResponse.risk_level,
     cost: enriched_data.estimated_cost,
     mode
-  }).catch(() => {});
+  }).catch(() => { });
 
   return enriched_data;
 };
