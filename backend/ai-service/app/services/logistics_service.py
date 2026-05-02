@@ -225,31 +225,110 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
         origin = data.origin or "Current Location"
         dest = data.destination or "Destination"
         weather = data.weatherData or {}
+        weather_condition = weather.get("condition") or "Clear"
         
         prompt = f"""
-            ROLE: Logistics Decision Engine (Deterministic)
+            ROLE: Deterministic Logistics Decision Engine (Strict Execution Mode)
 
-            INPUT:
-            Route: {origin}->{dest} | Mode: {mode}
-            Cargo: {data.cargo_type}, Priority={data.priority}, Perishable={data.is_perishable}
-            Deadline: {data.delivery_deadline or 'Flexible'}
-            Fuel: {data.fuel_level}% | Health: {data.vehicle_health}
-            Delay: {predicted_delay} | Risk: {risk_score}
-            TACTICAL STATE (What-If): Traffic Level={data.traffic_level}x | Speed Modifier={data.speed_modifier}x
+            SYSTEM:
+            You are NOT a conversational AI.
+            You are a rule-based logistics decision engine.
+            You MUST follow rules exactly and return ONLY valid JSON.
 
-            RULES:
-            NO_GO if: Fuel <15 OR Health=CRITICAL OR (Risk>85 AND Priority=HIGH)
-            REROUTE if: 60<=Risk<=85 OR Weather in [Storm,Flood] OR (Delay>30 AND Deadline exists)
-            GO if: Risk<60 AND no above conditions
+            ---
 
-            OUTPUT (JSON ONLY):
-            {{
-            "decision":"GO|REROUTE|NO_GO",
-            "sla_risk":true/false,
-            "confidence":0-100,
-            "reason":"max 20 words",
-            "action":"one clear instruction"
-            }}
+            ## INPUT
+
+            Route: {origin} → {dest}
+            Mode: {mode}
+
+            Cargo:
+            - Type: {data.cargo_type}
+            - Priority: {data.priority}
+            - Perishable: {data.is_perishable}
+
+            Constraints:
+            - Deadline: {data.delivery_deadline or "Flexible"}
+
+            Vehicle:
+            - Fuel: {data.fuel_level}%
+            - Health: {data.vehicle_health}
+
+            Environment:
+            - Traffic Multiplier: {data.traffic_level}
+            - Speed Modifier: {data.speed_modifier}
+            - Weather: {weather_condition}
+
+            Predictions:
+            - Delay: {predicted_delay} minutes
+            - Risk Score: {risk_score}
+
+            ---
+
+            ## DECISION RULES (STRICT PRIORITY)
+
+            1. NO_GO (highest priority)
+            IF:
+            - Fuel < 15
+            OR Health == "CRITICAL"
+            OR (Risk Score > 85 AND Priority == "HIGH")
+
+            2. REROUTE
+            IF:
+            - 60 ≤ Risk Score ≤ 85
+            OR Delay > 30 AND Deadline != "Flexible"
+            OR Traffic Multiplier ≥ 1.5
+            OR Weather in ["Storm", "Flood"]
+
+            3. GO
+            IF:
+            - Risk Score < 60
+            AND none of the above conditions apply
+
+            ---
+
+            ## SLA RISK
+
+            sla_risk = true IF:
+            - Delay > 20 AND Deadline != "Flexible"
+            - OR Risk Score > 70
+
+            ---
+
+            ## CONFIDENCE
+
+            confidence = clamp(100 - (Risk Score × 0.5) - (Delay × 0.5), 0, 100)
+
+            ---
+
+            ## TASK
+
+            1. Evaluate rules strictly (no guessing)
+            2. Select ONE decision only
+            3. Generate precise reasoning (4–5 sentences, operational tone)
+            4. Provide ONE clear action
+
+            ---
+
+            ## OUTPUT (STRICT JSON ONLY)
+
+            {
+                "decision": "GO | REROUTE | NO_GO",
+                "sla_risk": true | false,
+                "confidence": integer (0–100),
+                "reason": "4-5 short, precise sentences explaining key factors (risk, delay, traffic, vehicle, deadline)",
+                "action": "single clear operational instruction"
+            }
+
+            ---
+
+            ## HARD RULES
+
+            - No text outside JSON
+            - No markdown
+            - No explanation outside "reason"
+            - Follow rule priority strictly
+            - If uncertain → choose safer option (REROUTE over GO)
             """
             
         try:

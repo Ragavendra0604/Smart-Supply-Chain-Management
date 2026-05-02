@@ -176,7 +176,7 @@ class ApiService {
     return Map<String, dynamic>.from(body['simulation'] as Map);
   }
 
-  Future<void> injectSimulation({
+  Future<Map<String, dynamic>> injectSimulation({
     required String shipmentId,
     required String weatherCondition,
     required double trafficLevel,
@@ -197,6 +197,8 @@ class ApiService {
     if (response.statusCode >= 400) {
       throw Exception('Scenario injection failed');
     }
+    
+    return jsonDecode(response.body);
   }
 
   Future<void> createShipment({

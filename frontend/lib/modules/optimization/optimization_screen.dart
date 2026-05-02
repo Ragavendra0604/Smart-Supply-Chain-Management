@@ -872,6 +872,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
   double _simulatedRisk = 0.0;
   String _simulatedDelay = "0 mins";
   bool _useHeuristics = true;
+  bool _isInjecting = false;
+  DateTime? _lastAnalyzed;
 
   @override
   void initState() {
@@ -902,21 +904,39 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
   }
 
   Future<void> _injectScenario() async {
-    final controller = context.read<DashboardController>();
-    await controller.injectScenarioIntoLiveRoute(
-      shipmentId: widget.shipment.shipmentId,
-      weatherCondition: _weather,
-      trafficLevel: _trafficLevel,
-      speedModifier: _speedModifier,
-    );
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(controller.successMessage ?? 'Scenario injected'),
-          backgroundColor: AppTheme.success,
-          behavior: SnackBarBehavior.floating,
-        ),
+    setState(() => _isInjecting = true);
+    try {
+      final controller = context.read<DashboardController>();
+      final result = await controller.injectScenarioIntoLiveRoute(
+        shipmentId: widget.shipment.shipmentId,
+        weatherCondition: _weather,
+        trafficLevel: _trafficLevel,
+        speedModifier: _speedModifier,
       );
+
+      if (result != null && result['success'] == true && result['analysis'] != null) {
+        final analysis = result['analysis'] as Map<String, dynamic>;
+        setState(() {
+          _simulatedRisk = (analysis['risk_score'] as num).toDouble();
+          _simulatedDelay = analysis['predicted_delay_mins']?.toString() != null 
+              ? "${analysis['predicted_delay_mins']} mins" 
+              : "0 mins";
+          _useHeuristics = false;
+          _lastAnalyzed = DateTime.now();
+        });
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(controller.successMessage ?? 'Scenario injected'),
+            backgroundColor: AppTheme.success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isInjecting = false);
     }
   }
 
@@ -1027,23 +1047,41 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          _useHeuristics
-                              ? 'HEURISTIC ESTIMATE'
-                              : 'AI PREDICTION (2.5 FLASH)',
+                          _isInjecting 
+                              ? 'WAITING FOR AI ANALYSIS...'
+                              : (_useHeuristics
+                                  ? 'HEURISTIC ESTIMATE'
+                                  : 'AI PREDICTION (2.5 FLASH)'),
                           style: TextStyle(
-                            color: _useHeuristics
-                                ? AppTheme.textMuted
-                                : AppTheme.success,
+                            color: _isInjecting
+                                ? AppTheme.warning
+                                : (_useHeuristics
+                                    ? AppTheme.textMuted
+                                    : AppTheme.success),
                             fontSize: 9,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 1,
                           ),
                         ),
-                        if (!_useHeuristics)
+                        if (!_useHeuristics && !_isInjecting)
                           const Icon(Icons.verified,
                               color: AppTheme.success, size: 14),
+                        if (_isInjecting)
+                          const SizedBox(
+                            width: 10,
+                            height: 10,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.warning),
+                          ),
                       ],
                     ),
+                    if (_lastAnalyzed != null && !_isInjecting)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          'Last Analyzed: ${_lastAnalyzed!.hour}:${_lastAnalyzed!.minute.toString().padLeft(2, '0')}:${_lastAnalyzed!.second.toString().padLeft(2, '0')}',
+                          style: const TextStyle(fontSize: 8, color: AppTheme.textMuted, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     const SizedBox(height: 12),
                     Row(
                       children: [

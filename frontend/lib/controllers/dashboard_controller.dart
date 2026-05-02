@@ -287,14 +287,14 @@ class DashboardController extends ChangeNotifier {
     }
   }
 
-  Future<void> injectScenarioIntoLiveRoute({
+  Future<Map<String, dynamic>?> injectScenarioIntoLiveRoute({
     required String shipmentId,
     required String weatherCondition,
     required double trafficLevel,
     required double speedModifier,
   }) async {
     try {
-      await _apiService.injectSimulation(
+      final result = await _apiService.injectSimulation(
         shipmentId: shipmentId,
         weatherCondition: weatherCondition,
         trafficLevel: trafficLevel,
@@ -307,9 +307,11 @@ class DashboardController extends ChangeNotifier {
         'speedModifier': speedModifier
       });
       notifyListeners();
+      return result;
     } catch (e) {
       errorMessage = 'Failed to inject scenario.';
       _apiService.logToServer('ERROR', 'Scenario injection failed', {'error': e.toString()});
+      return null;
     }
   }
 
