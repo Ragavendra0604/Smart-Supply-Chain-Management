@@ -10,7 +10,7 @@ import { cacheManager } from '../utils/cache.js';
 export const toggleGlobalStop = async (req, res) => {
   try {
     const { stopped } = req.body; // true or false
-    
+
     // 1. Update Global State in Firestore
     await db().collection('system').doc('config').set({
       isGlobalStopped: stopped,
@@ -23,7 +23,7 @@ export const toggleGlobalStop = async (req, res) => {
 
     // 3. Immediate Action: Kill all local simulations if stopped is true
     if (stopped) {
-      simulatorController.stopSimulator({ body: {} }, { json: () => {} });
+      simulatorController.stopSimulator({ body: {} }, { json: () => { } });
       console.log('🚨 [SYSTEM] GLOBAL STOP TRIGGERED. All local simulations killed.');
     }
 

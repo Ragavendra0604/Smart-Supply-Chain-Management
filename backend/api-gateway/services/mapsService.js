@@ -64,28 +64,26 @@ const getRoute = async (origin, destination) => {
       };
     });
   } catch (error) {
-    console.error(`[MAPS SERVICE] API Failure: ${error.message}. Triggering simulation fallback.`);
+    console.error(`[MAPS SERVICE ERROR] Critical API Failure: ${error.message}.`);
     
-    // FALLBACK: Generate a realistic simulated route for demo purposes
-    // This ensures the system never crashes due to API key issues.
+    // FALLBACK: Instead of 'random' California routes, we return a minimal 
+    // structure that the simulator can handle without jumping across the globe.
+    // The real fix is to ensure GOOGLE_MAPS_API_KEY is active and has Directions API enabled.
     return [{
       route_id: `route_fallback`,
-      summary: "Simulated Direct Corridor (API Fallback)",
-      distance: "Simulated Distance",
-      distance_meters: 100000, 
-      duration: "Simulated Duration",
-      duration_seconds: 3600,
-      traffic_duration: "Simulated Duration",
-      traffic_duration_seconds: 3600,
+      summary: "Direct Path (API Fallback)",
+      distance: "Calculating...",
+      distance_meters: 0, 
+      duration: "Calculating...",
+      duration_seconds: 0,
+      traffic_duration: "Calculating...",
+      traffic_duration_seconds: 0,
       landmarks: [
-        { name: `Origin: ${origin}`, lat: 0, lng: 0 },
-        { name: `Destination: ${destination}`, lat: 0, lng: 0 }
+        { name: `Start: ${origin}`, lat: 0, lng: 0 },
+        { name: `End: ${destination}`, lat: 0, lng: 0 }
       ],
-      path: [
-        { lat: 37.7749, lng: -122.4194 }, // Placeholder SF
-        { lat: 34.0522, lng: -118.2437 }  // Placeholder LA
-      ],
-      source: 'simulation_fallback'
+      path: [], // Return empty path so simulation doesn't 'jump' to SF/LA
+      source: 'error_fallback'
     }];
   }
 
