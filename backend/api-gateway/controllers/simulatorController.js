@@ -1,5 +1,6 @@
 import { db } from '../config/firebase.js';
 import mapsService from '../services/mapsService.js';
+import { cacheManager } from '../utils/cache.js';
 
 /**
  * PRODUCTION STATELESS SIMULATOR (V5)
@@ -19,6 +20,9 @@ export const startSimulator = async (req, res) => {
     if (sysDoc.exists && sysDoc.data().isGlobalStopped) {
       return res.status(403).json({ success: false, message: 'Simulation blocked: Global Stop is active' });
     }
+
+    // Clear any existing stop cache for this shipment when restarting
+    cacheManager.delete(`stop:${shipment_id}`);
 
     // 2. Fetch Route Truth
     const shipmentDoc = await db().collection('shipments').doc(shipment_id).get();
@@ -58,10 +62,15 @@ export const stopSimulator = async (req, res) => {
   
   try {
     if (shipment_id) {
+      // 1. Update Firestore
       await db().collection('shipments').doc(shipment_id).update({
         status: 'STOPPED',
         updated_at: new Date()
       });
+
+      // 2. Sync Local Cache for immediate blocking
+      cacheManager.set(`stop:${shipment_id}`, true, 3600000); // 1hr TTL
+      console.log(`🛑 [SIMULATOR] Individual stop cached for ${shipment_id}`);
     }
     res.json({ success: true, message: 'Simulation marked as stopped in state.' });
   } catch (err) {

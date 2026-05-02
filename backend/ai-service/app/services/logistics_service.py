@@ -19,6 +19,13 @@ class InputData(BaseModel):
     currentLocation: Optional[Any] = None
     source: Optional[str] = None
     mode: Optional[str] = "ROAD"
+    # --- STRATEGIC PARAMETERS ---
+    cargo_type: Optional[str] = "General"
+    priority: Optional[str] = "Normal"
+    is_perishable: Optional[bool] = False
+    delivery_deadline: Optional[str] = None
+    fuel_level: Optional[float] = 100.0
+    vehicle_health: Optional[str] = "Good"
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD") -> float:
     ml_model = get_ml_model()
@@ -138,7 +145,7 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
         
     return processed_routes
 
-def generate_logistics_insight(prediction: float, data: InputData) -> str:
+def generate_logistics_insight(risk_score: float, predicted_delay: str, data: InputData) -> str:
     client = get_genai_client()
     if client is None:
         return "Insight unavailable (AI connection pending)."
@@ -150,19 +157,35 @@ def generate_logistics_insight(prediction: float, data: InputData) -> str:
         weather = data.weatherData or {}
         news = data.newsData or []
         
+        # Determine risk level for the prompt
+        risk_level = "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH"
+        
         prompt = f"""
-            System: Senior Logistics Strategy Consultant.
-            Context: {mode} Trip from {origin} to {dest}. 
-            Prediction: {prediction}min delay risk. 
-            Weather: {weather.get('condition', 'Unknown')} at destination.
-            News Alerts: {json.dumps(news[:2])}
+            System: Senior Logistics & Supply Chain Strategist.
             
-            Objective: Generate a 4-5 sentence tactical recommendation. 
-            Focus on Root Cause, Operational Impact, and a specific "Go/No-Go" or "Reroute" action.
-            Style: Authoritative, deterministic.
+            Task: Provide a high-value, deterministic tactical analysis for an active shipment.
+            
+            INPUT DATA:
+            - Shipment: {origin} to {dest} via {mode}
+            - Cargo: {data.cargo_type} (Priority: {data.priority}, Perishable: {data.is_perishable})
+            - Deadline: {data.delivery_deadline or 'Flexible'}
+            - Vehicle State: {data.fuel_level}% Fuel, Health Status: {data.vehicle_health}
+            - Risk Metrics: {risk_level} (Delay: {predicted_delay}, Score: {risk_score})
+            - Environmental: {weather.get('condition', 'Clear')} at {dest} ({weather.get('temperature', 'N/A')}°C)
+            - News Alerts: {json.dumps(news[:3])}
+
+            REQUIREMENTS:
+            1. STRATEGIC REASONING: Connect the environmental risk to the specific Cargo/Deadline constraints.
+            2. COMPLIANCE: If a deadline is present, state if it is at risk of breach.
+            3. MISSION ACTION: Give a single, authoritative Go/No-Go or Reroute instruction.
+            4. TONE: Professional, concise, and deterministic. Focus on ROI, Safety, and Service Level Agreements (SLAs).
+
+            FORMAT:
+            A single 4-5 sentence paragraph forming a clear, logical sequence.
             """
+            
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash", # Use the latest stable production-grade model
             contents=prompt
         )
         return response.text.strip()

@@ -113,9 +113,19 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             routeData=route_data,
             weatherData=weather_data,
             newsData=news_data,
-            mode=mode
+            mode=mode,
+            cargo_type=shipment_data.get("cargo_type", "General"),
+            priority=shipment_data.get("priority", "Normal"),
+            is_perishable=shipment_data.get("is_perishable", False),
+            delivery_deadline=shipment_data.get("delivery_deadline"),
+            fuel_level=shipment_data.get("fuel_level", 100.0),
+            vehicle_health=shipment_data.get("vehicle_health", "Good")
         )
-        insight = generate_logistics_insight(best['risk_score'], input_data)
+        insight = generate_logistics_insight(
+            best['risk_score'], 
+            f"{best['predicted_delay_mins']} mins", 
+            input_data
+        )
 
 
     optimization_data = {
@@ -180,7 +190,24 @@ def handle_predict(data: InputData):
             }
 
         best = next((r for r in scored_routes if r["is_recommended"]), scored_routes[0])
-        insight = generate_logistics_insight(best["risk_score"], data)
+        
+        # Enrich data for /predict if shipment_id was provided
+        if data.shipment_id:
+            doc = db.collection("shipments").document(data.shipment_id).get()
+            if doc.exists:
+                ship_data = doc.to_dict()
+                data.cargo_type = ship_data.get("cargo_type", data.cargo_type)
+                data.priority = ship_data.get("priority", data.priority)
+                data.is_perishable = ship_data.get("is_perishable", data.is_perishable)
+                data.delivery_deadline = ship_data.get("delivery_deadline", data.delivery_deadline)
+                data.fuel_level = ship_data.get("fuel_level", data.fuel_level)
+                data.vehicle_health = ship_data.get("vehicle_health", data.vehicle_health)
+
+        insight = generate_logistics_insight(
+            best["risk_score"], 
+            f"{best['predicted_delay_mins']} mins", 
+            data
+        )
 
         return {
             "success": True,

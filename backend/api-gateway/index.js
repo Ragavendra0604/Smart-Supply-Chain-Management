@@ -287,7 +287,36 @@ app.post('/update-location', authMiddleware, async (req, res) => {
 
     const { shipment_id, lat, lng, speed_kmh = 0, trigger_ai = true, current_place = "" } = req.body;
 
-    // --- SMART THROTTLING LOGIC ---
+    // --- 1. GLOBAL STOP CIRCUIT BREAKER ---
+    let isGlobalStopped = cacheManager.get('sys:global_stop');
+    if (isGlobalStopped === null) {
+      const sysDoc = await db().collection('system').doc('config').get();
+      isGlobalStopped = sysDoc.exists ? sysDoc.data().isGlobalStopped : false;
+      cacheManager.set('sys:global_stop', isGlobalStopped, 60000);
+    }
+
+    if (isGlobalStopped) {
+      return res.status(403).json({ success: false, error: 'System Global Stop active.' });
+    }
+
+    // --- 2. INDIVIDUAL SHIPMENT STOP GUARD ---
+    const shipmentStopKey = `stop:${shipment_id}`;
+    let isShipmentStopped = cacheManager.get(shipmentStopKey);
+    
+    if (isShipmentStopped === null) {
+      // Cold cache safety: Verify against Firestore
+      const doc = await db().collection('shipments').doc(shipment_id).get();
+      isShipmentStopped = doc.exists && doc.data().status === 'STOPPED';
+      if (isShipmentStopped) {
+        cacheManager.set(shipmentStopKey, true, 3600000);
+      }
+    }
+
+    if (isShipmentStopped) {
+      return res.status(403).json({ success: false, error: `Updates blocked: Shipment ${shipment_id} is STOPPED.` });
+    }
+
+    // --- 3. SMART THROTTLING LOGIC ---
     const cacheKey = `last_telemetry:${shipment_id}`;
     const lastTelemetry = cacheManager.get(cacheKey);
     const now = Date.now();
@@ -296,15 +325,12 @@ app.post('/update-location', authMiddleware, async (req, res) => {
     if (lastTelemetry) {
       const dist = calculateDistance(lat, lng, lastTelemetry.lat, lastTelemetry.lng);
       const timeElapsed = now - lastTelemetry.timestamp;
-
-      // Skip Firestore if it's a minor move and within time window
       if (dist < TELEMETRY_MIN_DIST && timeElapsed < TELEMETRY_MAX_TIME && !trigger_ai) {
         shouldUpdateFirestore = false;
       }
     }
 
     const result = await processIdempotentRequest(idempotencyKey, async () => {
-      // 1. Conditional Firestore Path (Saves Cost)
       if (shouldUpdateFirestore) {
         const shipmentRef = db().collection('shipments').doc(shipment_id);
         await shipmentRef.update({
@@ -314,25 +340,18 @@ app.post('/update-location', authMiddleware, async (req, res) => {
           status: 'IN_TRANSIT',
           updated_at: new Date()
         });
-        
-        // Cache this as the "last significant update"
         cacheManager.set(cacheKey, { lat, lng, timestamp: now }, TELEMETRY_MAX_TIME * 2);
       }
 
-      // 2. AI Triggering (Checkpoint Logic)
       if (trigger_ai) {
         await eventManager.publishEvent('shipment.location_updated', { shipment_id, lat, lng });
-      } else {
-        console.log(`[TELEMETRY] Skipping AI for ${shipment_id} (Intermediate Point)`);
       }
 
-      // 3. Log telemetry to BigQuery (Always log for high-fidelity audit trail, but we'll optimize BQ later)
       await eventManager.logToBigQuery(shipment_id, 'LOCATION_UPDATE', { lat, lng });
 
       return { 
         success: true, 
-        message: shouldUpdateFirestore ? 'Location updated in DB.' : 'Location buffered (minor move).',
-        ai_queued: trigger_ai
+        message: shouldUpdateFirestore ? 'Updated.' : 'Buffered.'
       };
     });
 

@@ -1,5 +1,6 @@
 import { db } from '../config/firebase.js';
 import simulatorController from './simulatorController.js';
+import { cacheManager } from '../utils/cache.js';
 
 /**
  * PRODUCTION SYSTEM CONTROLLER
@@ -17,7 +18,10 @@ export const toggleGlobalStop = async (req, res) => {
       updated_by: 'ADMIN'
     }, { merge: true });
 
-    // 2. Immediate Action: Kill all local simulations if stopped is true
+    // 2. Sync Local Cache for high-performance blocking in Gateway
+    cacheManager.set('sys:global_stop', stopped, 300000); // 5 min TTL
+
+    // 3. Immediate Action: Kill all local simulations if stopped is true
     if (stopped) {
       simulatorController.stopSimulator({ body: {} }, { json: () => {} });
       console.log('🚨 [SYSTEM] GLOBAL STOP TRIGGERED. All local simulations killed.');
