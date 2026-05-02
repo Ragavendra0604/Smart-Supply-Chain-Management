@@ -11,6 +11,7 @@ import shipmentRoutes from './routes/shipmentRoutes.js';
 import simulatorController from './controllers/simulatorController.js';
 import { corsOptions, rateLimiter, securityHeaders } from './utils/security.js';
 import { serializeFirestoreData } from './utils/firestoreSerializer.js';
+import shipmentController from './controllers/shipmentController.js';
 import {
   validateCreateShipment,
   validateLocationUpdate,
@@ -236,36 +237,39 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
       return res.status(400).json({ success: false, errors: validation.errors });
     }
 
-    const { shipment_id, origin, destination } = validation.value;
+    const { shipment_id, origin, destination, mode, priority } = validation.value;
 
-    // Fetch route data immediately
-    let routeData = [];
-    try {
-      routeData = await mapsService.getRoute(origin, destination);
-    } catch (err) {
-      console.error(`⚠️ Failed to fetch initial route: ${err.message}`);
-      // Continue with empty routeData
-    }
-
+    // 1. PERSISTENCE LAYER: Initialize skeleton record with mode and priority
     await db().collection('shipments').doc(shipment_id).set({
       shipment_id,
       origin,
       destination,
-      vehicle_type: 'TRUCK',
+      vehicle_type: mode,
       current_location: null,
-      risk: null,
       status: 'CREATED',
-      routeData: routeData, // Store route data immediately
-      created_at: new Date()
+      priority: priority,
+      cargo_type: 'General',
+      fuel_level: 100,
+      vehicle_health: 'GOOD',
+      created_at: new Date(),
+      updated_at: new Date()
     });
 
-    // --- TRIGGER ANALYSIS ON CREATION ---
-    // Decoupled call to the analysis pipeline to ensure the user gets immediate intelligence
-    import('./controllers/shipmentController.js').then(m => {
-      m.default.runAsyncAnalysis(shipment_id);
-    });
+    // 2. INTELLIGENT INITIALIZATION PIPELINE (Synchronous for UX, parallel for speed)
+    let analysisResult = null;
+    try {
+      analysisResult = await shipmentController.performAnalysis(shipment_id);
+    } catch (analysisErr) {
+      console.error(`⚠️ Synchronous analysis failed for ${shipment_id}: ${analysisErr.message}`);
+      // Fallback: trigger async analysis if sync fails
+      shipmentController.runAsyncAnalysis(shipment_id);
+    }
 
-    res.json({ success: true, shipment_id });
+    res.json({ 
+      success: true, 
+      shipment_id,
+      analysis: analysisResult 
+    });
 
   } catch (err) {
     res.status(500).json({ error: err.message });

@@ -209,6 +209,26 @@ def handle_predict(data: InputData):
             data
         )
 
+        optimization_data = {
+            "before": {
+                "time": f"{scored_routes[0]['travel_time_min'] // 60}h {scored_routes[0]['travel_time_min'] % 60}m",
+                "cost": scored_routes[0]['total_cost'],
+                "fuel": scored_routes[0]['total_fuel']
+            },
+            "after": {
+                "time": f"{best['travel_time_min'] // 60}h {best['travel_time_min'] % 60}m",
+                "cost": best['total_cost'],
+                "fuel": best['total_fuel']
+            }
+        }
+
+        # Final structural alignment for Senior Architect requirements
+        ai_insights = {
+            "delay_probability": round(best["risk_score"] * 100, 1),
+            "bottlenecks": [n['title'] for n in data.newsData[:2]] if data.newsData else ["No critical bottlenecks"],
+            "recommendation": insight
+        }
+
         return {
             "success": True,
             "risk_score": best["risk_score"],
@@ -216,6 +236,8 @@ def handle_predict(data: InputData):
             "delay_prediction": f"{best['predicted_delay_mins']} mins",
             "suggestion": f"Optimal {data.mode} route via '{best.get('summary', 'Main Route')}' selected.",
             "insight": insight,
+            "ai_insights": ai_insights,
+            "optimization_data": optimization_data,
             "all_routes": scored_routes
         }
     except Exception as e:

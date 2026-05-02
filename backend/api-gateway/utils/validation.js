@@ -14,6 +14,9 @@ export const validateCreateShipment = (body = {}) => {
   const destination = isNonEmptyString(body.destination)
     ? normalizeString(body.destination)
     : '';
+  
+  const mode = isNonEmptyString(body.mode) ? normalizeString(body.mode).toUpperCase() : 'ROAD';
+  const priority = isNonEmptyString(body.priority) ? normalizeString(body.priority).toUpperCase() : 'NORMAL';
 
   if (!shipment_id) {
     errors.push('shipment_id is required');
@@ -30,7 +33,9 @@ export const validateCreateShipment = (body = {}) => {
     value: {
       shipment_id,
       origin,
-      destination
+      destination,
+      mode,
+      priority
     }
   };
 };
@@ -87,6 +92,7 @@ export const sanitizeAiResponse = (raw = {}) => {
     suggestion: isNonEmptyString(raw.suggestion) ? raw.suggestion : 'Proceed normally',
     insight: isNonEmptyString(raw.insight) ? raw.insight : '',
     optimization_data: raw.optimization_data || null,
-    all_routes: Array.isArray(raw.all_routes) ? raw.all_routes : []
+    all_routes: Array.isArray(raw.all_routes) ? raw.all_routes : [],
+    ai_insights: raw.ai_insights || { delay_probability: 0, bottlenecks: [], recommendation: '' }
   };
 };

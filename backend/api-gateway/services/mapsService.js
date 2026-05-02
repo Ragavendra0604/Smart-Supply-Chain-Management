@@ -1,5 +1,8 @@
 import axios from 'axios';
 import polyline from '@mapbox/polyline';
+import { cacheManager } from '../utils/cache.js';
+
+const ROUTE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
 /**
  * PRODUCTION MAPS SERVICE
@@ -7,6 +10,10 @@ import polyline from '@mapbox/polyline';
  * No hardcoded fallbacks for specific cities.
  */
 const getRoute = async (origin, destination) => {
+  const cacheKey = `route:${origin.toLowerCase()}:${destination.toLowerCase()}`;
+  const cached = cacheManager.get(cacheKey);
+  if (cached) return cached;
+
   const url = `https://maps.googleapis.com/maps/api/directions/json`;
 
   if (!process.env.GOOGLE_MAPS_API_KEY) {
@@ -33,7 +40,7 @@ const getRoute = async (origin, destination) => {
       throw new Error(`No routes found between "${origin}" and "${destination}". Please check the addresses.`);
     }
 
-    return response.data.routes.map((route, index) => {
+    const results = response.data.routes.map((route, index) => {
       const leg = route.legs[0];
       
       // 1. EXTRACT LANDMARKS FROM STEPS
@@ -72,6 +79,9 @@ const getRoute = async (origin, destination) => {
         source: 'google_maps_api_overview'
       };
     });
+
+    cacheManager.set(cacheKey, results, ROUTE_CACHE_TTL);
+    return results;
   } catch (error) {
     console.error(`[MAPS SERVICE ERROR] Critical API Failure: ${error.message}.`);
     
