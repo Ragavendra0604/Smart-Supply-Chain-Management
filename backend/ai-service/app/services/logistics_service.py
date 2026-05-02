@@ -181,11 +181,13 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             4. TONE: Professional, concise, and deterministic. Focus on ROI, Safety, and Service Level Agreements (SLAs).
 
             FORMAT:
-            A single 4-5 sentence paragraph forming a clear, logical sequence.
+            - A concise STRATEGIC SUMMARY (2 sentences) connecting environmental risks to the cargo SLA.
+            - A deterministic TACTICAL INSTRUCTION (1 sentence) with a clear Go/No-Go or Reroute.
+            - Focus on impact to delivery ROI and safety.
             """
             
         response = client.models.generate_content(
-            model="gemini-2.5-flash", # Use the latest stable production-grade model
+            model="gemini-2.5-flash",
             contents=prompt
         )
         return response.text.strip()
