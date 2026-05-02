@@ -381,6 +381,13 @@ class _ShipmentCard extends StatelessWidget {
                       final isSimulatingThis = controller.isSimulating &&
                           controller.simulatingShipmentId ==
                               shipment.shipmentId;
+                      final bool isStopped = shipment.status == 'STOPPED';
+                      final String buttonLabel = isSimulatingThis 
+                          ? 'Stop' 
+                          : (isStopped ? 'Resume' : 'Simulate');
+                      final IconData buttonIcon = isSimulatingThis 
+                          ? Icons.stop_circle 
+                          : (isStopped ? Icons.play_circle_filled_rounded : Icons.play_arrow_rounded);
 
                       return ElevatedButton.icon(
                         onPressed: () {
@@ -389,7 +396,7 @@ class _ShipmentCard extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(isStarting
-                                  ? '🚀 Simulation started for ${shipment.shipmentId}'
+                                  ? (isStopped ? '▶️ Simulation resumed' : '🚀 Simulation started for ${shipment.shipmentId}')
                                   : '🛑 Simulation stopped'),
                               duration: const Duration(seconds: 2),
                               behavior: SnackBarBehavior.floating,
@@ -400,12 +407,10 @@ class _ShipmentCard extends StatelessWidget {
                           );
                         },
                         icon: Icon(
-                          isSimulatingThis
-                              ? Icons.stop_circle
-                              : Icons.play_arrow_rounded,
+                          buttonIcon,
                           size: 18,
                         ),
-                        label: Text(isSimulatingThis ? 'Stop' : 'Simulate'),
+                        label: Text(buttonLabel),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: isSimulatingThis
                               ? AppTheme.danger.withValues(alpha: 0.1)

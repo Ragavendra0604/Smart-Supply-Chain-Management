@@ -70,7 +70,7 @@ class _DashboardMapState extends State<DashboardMap> {
         // Using a high-visibility Blue pin by default, or Risk-Color if high
         icon: BitmapDescriptor.defaultMarkerWithHue(
           widget.shipment.riskLevel == 'LOW' 
-            ? BitmapDescriptor.hueBlue 
+            ? BitmapDescriptor.hueAzure 
             : riskMarkerHue(widget.shipment.riskLevel),
         ),
         infoWindow: InfoWindow(
