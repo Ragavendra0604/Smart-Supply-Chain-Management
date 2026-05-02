@@ -869,12 +869,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
   double _trafficLevel = 0.4;
   String _weather = 'Clear';
   double _speedModifier = 1.0;
-  bool _isHighPriority = false;
-  String _selectedModel = 'gemini-2.5-flash';
-
   double _simulatedRisk = 0.0;
   String _simulatedDelay = "0 mins";
-  bool _isAiLoading = false;
   bool _useHeuristics = true;
 
   @override
@@ -892,7 +888,6 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
     if (_weather.toLowerCase().contains('rain')) risk += 0.2;
     if (_weather.toLowerCase().contains('storm')) risk += 0.55;
     if (_speedModifier > 1.2) risk += 0.3;
-    if (_isHighPriority) risk += 0.1;
 
     int delayMins = (40 * _trafficLevel).toInt();
     if (_weather.toLowerCase().contains('storm')) delayMins += 60;
@@ -904,33 +899,6 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
       _simulatedDelay = "$delayMins mins";
       _useHeuristics = true;
     });
-  }
-
-  Future<void> _runAiSimulation() async {
-    setState(() => _isAiLoading = true);
-    try {
-      final controller = context.read<DashboardController>();
-      final result = await controller.simulateTacticalScenario(
-        shipmentId: widget.shipment.shipmentId,
-        weatherCondition: _weather,
-        trafficLevel: _trafficLevel,
-        speedModifier: _speedModifier,
-        modelName: _selectedModel,
-      );
-
-      setState(() {
-        _simulatedRisk = (result['risk_score'] as num).toDouble();
-        _simulatedDelay = result['delay_prediction']?.toString() ?? '0 mins';
-        _isAiLoading = false;
-        _useHeuristics = false;
-      });
-    } catch (e) {
-      setState(() => _isAiLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('AI Simulation failed. Falling back to heuristics.')),
-      );
-    }
   }
 
   Future<void> _injectScenario() async {
@@ -1038,115 +1006,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                   activeColor: AppTheme.primary,
                 ),
               ),
-              const Divider(height: 24),
-              _buildSimulatorControl(
-                label: 'Inference Model',
-                value:
-                    _selectedModel.split('-').skip(1).join('-').toUpperCase(),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: ['gemini-2.5-flash'].map((m) {
-                      final selected = _selectedModel == m;
-                      final label = m.contains('2.5')
-                          ? '2.5 Flash'
-                          : (m.contains('pro') ? '1.5 Pro' : '1.5 Flash');
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: Text(label),
-                          selected: selected,
-                          onSelected: (s) {
-                            if (s) {
-                              setState(() => _selectedModel = m);
-                              _recalculate();
-                            }
-                          },
-                          selectedColor:
-                              AppTheme.primary.withValues(alpha: 0.1),
-                          labelStyle: TextStyle(
-                            color: selected
-                                ? AppTheme.primary
-                                : AppTheme.textSecondary,
-                            fontWeight:
-                                selected ? FontWeight.bold : FontWeight.normal,
-                            fontSize: 10,
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ),
-              const Divider(height: 24),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Priority Cargo',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Simulate impact of time-critical delivery constraints',
-                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                ),
-                value: _isHighPriority,
-                onChanged: (v) {
-                  setState(() => _isHighPriority = v);
-                  _recalculate();
-                },
-                activeColor: AppTheme.primary,
-              ),
-              const Divider(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'AI High Fidelity',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            color: AppTheme.textSecondary),
-                      ),
-                      Text(
-                        'Powered by v3 XGBoost Engine',
-                        style:
-                            TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                      ),
-                    ],
-                  ),
-                  SizedBox(
-                    height: 36,
-                    child: ElevatedButton.icon(
-                      onPressed: _isAiLoading ? null : _runAiSimulation,
-                      icon: _isAiLoading
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2, color: AppTheme.primary))
-                          : const Icon(Icons.bolt, size: 16),
-                      label: const Text('RUN AI SIM',
-                          style: TextStyle(
-                              fontSize: 11, fontWeight: FontWeight.w900)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            AppTheme.primary.withValues(alpha: 0.1),
-                        foregroundColor: AppTheme.primary,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              const SizedBox(height: 8),
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -1169,7 +1029,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                         Text(
                           _useHeuristics
                               ? 'HEURISTIC ESTIMATE'
-                              : 'AI PREDICTION (${_selectedModel.toUpperCase()})',
+                              : 'AI PREDICTION (2.5 FLASH)',
                           style: TextStyle(
                             color: _useHeuristics
                                 ? AppTheme.textMuted
@@ -1216,7 +1076,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _useHeuristics ? null : _injectScenario,
+                  onPressed: _injectScenario,
                   icon: const Icon(Icons.input_rounded, size: 18),
                   label: const Text('INJECT INTO LIVE TRANSIT',
                       style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
