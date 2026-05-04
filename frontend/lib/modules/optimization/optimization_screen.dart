@@ -12,13 +12,20 @@ class OptimizationScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final opt = shipment.ai.optimization;
-    final allRoutes = shipment.ai.allRoutes;
+    final controller = context.watch<DashboardController>();
+    // Always use the latest version of this shipment from the controller
+    final currentShipment = controller.recentShipments.firstWhere(
+      (s) => s.shipmentId == shipment.shipmentId,
+      orElse: () => shipment,
+    );
+
+    final opt = currentShipment.ai.optimization;
+    final allRoutes = currentShipment.ai.allRoutes;
     final isWide = MediaQuery.of(context).size.width > 900;
 
     final content = isWide
-        ? _buildWideLayout(context, opt, allRoutes)
-        : _buildMobileLayout(context, opt, allRoutes);
+        ? _buildWideLayout(context, currentShipment, opt, allRoutes)
+        : _buildMobileLayout(context, currentShipment, opt, allRoutes);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FF),
@@ -37,16 +44,19 @@ class OptimizationScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context,
-      ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
+  Widget _buildMobileLayout(
+      BuildContext context,
+      Shipment currentShipment,
+      ShipmentOptimizationData? opt,
+      List<Map<String, dynamic>> allRoutes) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Header(shipment: shipment),
+          _Header(shipment: currentShipment),
           const SizedBox(height: 24),
-          _RiskBanner(shipment: shipment),
+          _RiskBanner(shipment: currentShipment),
           const SizedBox(height: 24),
           if (opt != null) ...[
             _ComparisonSection(opt: opt),
@@ -57,22 +67,26 @@ class OptimizationScreen extends StatelessWidget {
             const SizedBox(height: 24),
           ],
           _AiReasoning(
-            explanation: shipment.ai.explanation,
-            suggestion: shipment.ai.suggestion,
+            explanation: currentShipment.ai.explanation,
+            suggestion: currentShipment.ai.suggestion,
           ),
           const SizedBox(height: 24),
-          if (shipment.news.isNotEmpty) _NewsSection(news: shipment.news),
+          if (currentShipment.news.isNotEmpty)
+            _NewsSection(news: currentShipment.news),
           const SizedBox(height: 24),
-          _WhatIfSimulator(shipment: shipment),
+          _WhatIfSimulator(shipment: currentShipment),
           const SizedBox(height: 24),
-          _ActionButtons(shipment: shipment),
+          _ActionButtons(shipment: currentShipment),
         ],
       ),
     );
   }
 
-  Widget _buildWideLayout(BuildContext context,
-      ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
+  Widget _buildWideLayout(
+      BuildContext context,
+      Shipment currentShipment,
+      ShipmentOptimizationData? opt,
+      List<Map<String, dynamic>> allRoutes) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Row(
@@ -85,17 +99,17 @@ class OptimizationScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Header(shipment: shipment),
+                  _Header(shipment: currentShipment),
                   const SizedBox(height: 24),
-                  _RiskBanner(shipment: shipment),
+                  _RiskBanner(shipment: currentShipment),
                   const SizedBox(height: 24),
                   if (opt != null) ...[
                     _ComparisonSection(opt: opt),
                     const SizedBox(height: 24),
                   ],
                   _AiReasoning(
-                    explanation: shipment.ai.explanation,
-                    suggestion: shipment.ai.suggestion,
+                    explanation: currentShipment.ai.explanation,
+                    suggestion: currentShipment.ai.suggestion,
                   ),
                 ],
               ),
@@ -113,13 +127,13 @@ class OptimizationScreen extends StatelessWidget {
                     _AllRoutesSection(routes: allRoutes),
                     const SizedBox(height: 24),
                   ],
-                  if (shipment.news.isNotEmpty) ...[
-                    _NewsSection(news: shipment.news),
+                  if (currentShipment.news.isNotEmpty) ...[
+                    _NewsSection(news: currentShipment.news),
                     const SizedBox(height: 24),
                   ],
-                  _WhatIfSimulator(shipment: shipment),
+                  _WhatIfSimulator(shipment: currentShipment),
                   const SizedBox(height: 24),
-                  _ActionButtons(shipment: shipment),
+                  _ActionButtons(shipment: currentShipment),
                 ],
               ),
             ),
