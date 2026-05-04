@@ -278,13 +278,17 @@ class ShipmentAiInsight {
       }
     }
 
+    // Structural support for enriched gateway response
+    final aiInsights = data['ai_insights'] as Map<String, dynamic>?;
+    final recommendation = aiInsights?['recommendation']?.toString();
+
     return ShipmentAiInsight(
-      success: data['success'] == true,
-      riskScore: numValue(data['risk_score']),
-      riskLevel: stringValue(data['risk_level'], fallback: 'UNKNOWN'),
-      delayPrediction: stringValue(data['delay_prediction'], fallback: '--'),
-      suggestion: stringValue(data['suggestion'], fallback: 'Awaiting recommendation'),
-      explanation: stringValue(data['insight'] ?? data['explanation'], fallback: ''),
+      success: data['success'] == true || data['ai_insights'] != null,
+      riskScore: numValue(data['risk_score'] ?? aiInsights?['delay_probability'] ?? 0) / (data['risk_score'] is String ? 1 : 1),
+      riskLevel: stringValue(data['risk_level'] ?? data['risk_score'], fallback: 'UNKNOWN'),
+      delayPrediction: stringValue(data['delay_prediction'] ?? data['estimated_time'], fallback: '--'),
+      suggestion: stringValue(data['suggestion'] ?? recommendation, fallback: 'Awaiting recommendation'),
+      explanation: stringValue(data['insight'] ?? data['explanation'] ?? recommendation, fallback: ''),
       optimization: data['optimization_data'] != null
           ? ShipmentOptimizationData.fromMap(mapValue(data['optimization_data']))
           : null,
