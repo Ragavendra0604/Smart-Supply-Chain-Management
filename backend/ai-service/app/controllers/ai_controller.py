@@ -101,8 +101,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     
     # Semantic Caching DISABLED for MVP dynamic testing
     should_call_gemini = True
-
-    insight = prev_insight
+    insight = existing_ai.get("insight")
+    
     if should_call_gemini:
         input_data = InputData(
             shipment_id=shipment_id,
