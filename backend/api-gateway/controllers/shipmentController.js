@@ -184,7 +184,7 @@ const applyRoute = async (req, res) => {
       updated_at: new Date()
     });
 
-    eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch(() => {});
+    eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch(() => { });
 
     res.json({
       success: true,
@@ -221,12 +221,12 @@ const injectSimulation = async (req, res) => {
       traffic: trafficLevel,
       speed_mod: speedModifier,
       has_ai_feedback: !!analysisResult
-    }).catch(() => {});
+    }).catch(() => { });
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Scenario injected and AI reasoning refreshed',
-      analysis: analysisResult 
+      analysis: analysisResult
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });

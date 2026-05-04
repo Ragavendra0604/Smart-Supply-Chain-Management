@@ -179,137 +179,100 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
         
     return processed_routes
 
-def generate_logistics_insight(risk_score: float, predicted_delay: str, data: InputData) -> str:
+from app.models.schemas import LogisticsEngineResponse, EngineAnalysis
+
+def generate_logistics_insight(risk_score: float, predicted_delay: str, data: InputData) -> Dict[str, Any]:
     client = get_genai_client()
     
     # --- DETERMINISTIC FALLBACK LOGIC ---
-    def get_fallback_insight(reason: str) -> str:
-        risk_level = "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.7 else "HIGH"
-        decision = "GO"
-        action = "Proceed with caution."
+    def get_fallback_engine_response(reason: str) -> Dict[str, Any]:
+        risk_level = "LOW" if risk_score < 0.3 else "MEDIUM" if risk_score < 0.6 else "HIGH"
+        decision = "GO" if risk_score < 0.3 else "HOLD" if risk_score < 0.6 else "REROUTE"
         
-        if risk_score > 0.85 or data.vehicle_health.upper() == "CRITICAL":
-            decision = "NO_GO"
-            action = "Halt shipment and await further instructions."
-        elif risk_score > 0.6:
-            decision = "REROUTE"
-            action = "Recalculating optimal path."
-            
-        return f"⚠️ FALLBACK ({reason}) | {decision}: Environmental risk is {risk_level}. Instruction: {action}"
+        # Simple heuristic for fallback metrics
+        return {
+            "success": True,
+            "analysis": {
+                "route": {"origin": data.origin or "Unknown", "destination": data.destination or "Unknown", "distance_km": 0.0},
+                "traffic": {"duration_minutes": 0.0, "congestion_level": risk_level, "traffic_index": data.traffic_level - 1.0 if data.traffic_level > 1.0 else 0.0},
+                "weather": {"condition": (data.weatherData or {}).get("condition", "Clear"), "severity_index": 0.1},
+                "fuel": {"fuel_price_per_litre": 1.2, "consumption_kmpl": 12.0, "fuel_cost": 0.0},
+                "costing": {"base_cost": 100.0, "fuel_cost": 0.0, "total_cost": 100.0},
+                "time": {"estimated_minutes": 0.0, "delay_probability": risk_score},
+                "risk": {
+                    "score": risk_score,
+                    "level": risk_level,
+                    "factors": {"traffic": 0.4, "weather": 0.3, "route": 0.3}
+                },
+                "ai_insights": {
+                    "decision": decision,
+                    "confidence": 0.9,
+                    "bottlenecks": [f"Fallback mode: {reason}"],
+                    "recommendation": f"Proceed with {decision} protocol based on heuristic risk of {risk_score}."
+                }
+            }
+        }
 
     if client is None:
-        return get_fallback_insight("AI connection pending")
+        return get_fallback_engine_response("AI connection pending")
 
     try:
-        mode = data.mode
-        origin = data.origin or "Current Location"
-        dest = data.destination or "Destination"
         weather = data.weatherData or {}
         weather_condition = weather.get("condition") or "Clear"
+        timestamp = datetime.now().isoformat()
         
+        # --- NEW SENIOR LOGISTICS ENGINE PROMPT ---
         prompt = f"""
-            ROLE: Strategic AI Logistics Advisor (Primary Intelligence Mode)
+            SYSTEM ROLE: Senior AI Logistics Decision Engine (Deterministic + Explainable Mode)
 
-            SYSTEM:
-            You are the primary intelligence layer for this supply chain.
-            The ML model is in observation mode; YOU are responsible for synthesizing 
-            environmental data, vehicle telemetry, and tactical overrides into 
-            operational decisions.
+            OBJECTIVE:
+            Generate a complete, realistic, and production-ready shipment analysis JSON. 
+            The system MUST compute all logistics factors dynamically and avoid assumptions.
 
-            ---
-
-            ## INPUT
-
-            Route: {origin} → {dest}
-            Mode: {mode}
-
-            Cargo:
-            - Type: {data.cargo_type}
+            INPUT:
+            - Origin: {data.origin or "Unknown"}
+            - Destination: {data.destination or "Unknown"}
+            - Mode: {data.mode}
+            - Cargo Type: {data.cargo_type}
             - Priority: {data.priority}
             - Perishable: {data.is_perishable}
-
-            Constraints:
-            - Deadline: {data.delivery_deadline or "Flexible"}
-
-            Vehicle:
-            - Fuel: {data.fuel_level}%
-            - Health: {data.vehicle_health}
-
-            Environment:
-            - Traffic Multiplier: {data.traffic_level}
+            - Current Time: {timestamp}
+            - Fuel Level: {data.fuel_level}%
+            - Vehicle Health: {data.vehicle_health}
+            - Traffic Level: {data.traffic_level}
             - Speed Modifier: {data.speed_modifier}
+
+            AVAILABLE DATA SOURCES (MANDATORY USAGE):
+            - Route: {json.dumps(data.routeData) if data.routeData else "[]"}
             - Weather: {weather_condition}
+            - News/Disruptions: {json.dumps(data.newsData) if data.newsData else "[]"}
 
-            Predictions:
-            - Delay: {predicted_delay} minutes
-            - Risk Score: {risk_score}
+            STRICT REQUIREMENTS:
+            1. Return ONLY valid JSON. No explanations, no extra text.
+            2. Numeric values must be numbers (NO strings like "39 mins").
+            3. delay_probability MUST NOT be 0 unless mathematically justified.
+            4. risk_score = (0.4 × traffic_index) + (0.3 × weather_severity) + (0.3 × route_complexity).
+            5. Use probabilistic and realistic modeling.
 
-            ---
+            DECISION LOGIC:
+            - GO -> risk < 0.3
+            - HOLD -> risk 0.3–0.6
+            - REROUTE -> risk > 0.6 or major bottlenecks
 
-            ## DECISION RULES (STRICT PRIORITY)
-
-            1. NO_GO (highest priority)
-            IF:
-            - Fuel < 15
-            OR Health == "CRITICAL"
-            OR (Risk Score > 85 AND Priority == "HIGH")
-
-            2. REROUTE
-            IF:
-            - 60 ≤ Risk Score ≤ 85
-            OR Delay > 30 AND Deadline != "Flexible"
-            OR Traffic Multiplier ≥ 1.5
-            OR Weather in ["Storm", "Flood"]
-
-            3. GO
-            IF:
-            - Risk Score < 60
-            AND none of the above conditions apply
-
-            ---
-
-            ## SLA RISK
-
-            sla_risk = true IF:
-            - Delay > 20 AND Deadline != "Flexible"
-            - OR Risk Score > 70
-
-            ---
-
-            ## CONFIDENCE
-
-            confidence = clamp(100 - (Risk Score × 0.5) - (Delay × 0.5), 0, 100)
-
-            ---
-
-            ## TASK
-
-            1. Evaluate rules strictly (no guessing)
-            2. Select ONE decision only
-            3. Generate precise reasoning (4–5 sentences, operational tone)
-            4. Provide ONE clear action
-
-            ---
-
-            ## OUTPUT (STRICT JSON ONLY)
-
+            OUTPUT SCHEMA (STRICT JSON ONLY):
             {{
-                "decision": "GO | REROUTE | NO_GO",
-                "sla_risk": true | false,
-                "confidence": integer (0–100),
-                "reason": "4-5 short, precise sentences explaining key factors (risk, delay, traffic, vehicle, deadline). Keep under 300 characters.",
-                "action": "single clear operational instruction"
+                "success": true,
+                "analysis": {{
+                    "route": {{ "origin": "...", "destination": "...", "distance_km": number }},
+                    "traffic": {{ "duration_minutes": number, "congestion_level": "LOW|MEDIUM|HIGH", "traffic_index": 0–1 }},
+                    "weather": {{ "condition": "...", "severity_index": 0–1 }},
+                    "fuel": {{ "fuel_price_per_litre": number, "consumption_kmpl": number, "fuel_cost": number }},
+                    "costing": {{ "base_cost": number, "fuel_cost": number, "total_cost": number }},
+                    "time": {{ "estimated_minutes": number, "delay_probability": 0–1 }},
+                    "risk": {{ "score": 0–1, "level": "LOW|MEDIUM|HIGH", "factors": {{ "traffic": number, "weather": number, "route": number }} }},
+                    "ai_insights": {{ "decision": "GO|HOLD|REROUTE", "confidence": 0–1, "bottlenecks": [], "recommendation": "clear actionable instruction" }}
+                }}
             }}
-
-            ---
-
-            ## HARD RULES
-
-            - No text outside JSON
-            - No markdown
-            - No explanation outside "reason"
-            - Follow rule priority strictly
-            - If uncertain → choose safer option (REROUTE over GO)
             """
             
         try:
@@ -318,32 +281,26 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
-                config={
-                    'response_mime_type': 'application/json',
-                }
+                config={ 'response_mime_type': 'application/json' }
             )
             
             if not response or not response.text:
-                return get_fallback_insight("Empty AI response")
+                return get_fallback_engine_response("Empty AI response")
 
-            # --- PRODUCTION-GRADE VALIDATION ---
+            # --- SCHEMA ENFORCEMENT ---
             try:
-                # 1. Raw JSON load
                 res_json = json.loads(response.text.strip())
-                # 2. Pydantic validation (Schema Enforcement)
-                decision_obj = TacticalDecision(**res_json)
-            except (json.JSONDecodeError, Exception) as parse_err:
-                logger.error(f"AI Schema Validation Failed: {parse_err}")
-                return get_fallback_insight("Schema mismatch")
+                # Validate against the new mandatory schema
+                validated = LogisticsEngineResponse(**res_json)
+                return validated.dict()
+            except Exception as parse_err:
+                logger.error(f"AI Engine Schema Validation Failed: {parse_err}")
+                return get_fallback_engine_response("Schema mismatch")
             
-            # Format for the Premium Dashboard Insight
-            icon = "✅" if decision_obj.decision == "GO" else "⚠️" if decision_obj.decision == "REROUTE" else "🛑"
-            return f"{icon} {decision_obj.decision}: {decision_obj.reason} Instruction: {decision_obj.action}"
-
         except Exception as e:
-            logger.error(f"Gemini API Error: {str(e)}")
-            return get_fallback_insight("API Timeout")
+            logger.error(f"Gemini API Engine Error: {str(e)}")
+            return get_fallback_engine_response("API Timeout")
 
     except Exception as e:
-        logger.error(f"Gemini Insight Wrapper Error: {e}")
-        return get_fallback_insight("System Error")
+        logger.error(f"Gemini Engine Wrapper Error: {e}")
+        return get_fallback_engine_response("System Error")

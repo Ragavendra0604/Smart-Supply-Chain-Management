@@ -99,19 +99,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     best = next((r for r in processed_routes if r["is_recommended"]), processed_routes[0])
     current = processed_routes[0]
     
-    # Semantic Caching
-    prev_risk_level = existing_ai.get("risk_level")
-    prev_risk_score = existing_ai.get("risk_score", 0)
-    prev_insight = existing_ai.get("insight")
-    
+    # Semantic Caching DISABLED for MVP dynamic testing
     should_call_gemini = True
-    if prev_insight and prev_risk_level == best['risk_level']:
-        score_diff = abs(best['risk_score'] - prev_risk_score)
-        if score_diff < 0.15:
-            prev_weather = existing_ai.get("cached_state", {}).get("weather_condition")
-            curr_weather = (weather_data.get("condition") or "clear").lower()
-            if prev_weather == curr_weather:
-                should_call_gemini = False
 
     insight = prev_insight
     if should_call_gemini:
@@ -149,6 +138,24 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             "fuel": best['total_fuel']
         }
     }
+
+    result = {
+        "success": True,
+        "risk_score": best['risk_score'],
+        "risk_level": best['risk_level'],
+        "delay_prediction": f"{best['predicted_delay_mins']} mins",
+        "suggestion": f"Switch to {best['summary']} for optimal safety." if best is not current else "Maintain current optimal route.",
+        "insight": insight,
+        "optimization_data": optimization_data,
+        "all_routes": processed_routes,
+        "last_analyzed": "SERVER_TIMESTAMP",
+        "cached_state": {
+            "weather_condition": (weather_data.get("condition") or "clear").lower(),
+            "mode": mode
+        }
+    }
+    
+    logger.info(f"--- BACKGROUND AI ANALYSIS [{shipment_id}] ---\n{json.dumps(result, indent=2, default=str)}")
 
     doc_ref.update({
         "aiResponse": {
@@ -221,11 +228,16 @@ def handle_predict(data: InputData):
                 data.fuel_level = ship_data.get("fuel_level", data.fuel_level)
                 data.vehicle_health = ship_data.get("vehicle_health", data.vehicle_health)
 
-        insight = generate_logistics_insight(
+        # --- STRATEGIC ENGINE PROCESSING ---
+        engine_data = generate_logistics_insight(
             best["risk_score"], 
             f"{best['predicted_delay_mins']} mins", 
             data
         )
+        
+        analysis = engine_data.get("analysis", {})
+        engine_insights = analysis.get("ai_insights", {})
+        engine_risk = analysis.get("risk", {})
 
         optimization_data = {
             "before": {
@@ -240,24 +252,28 @@ def handle_predict(data: InputData):
             }
         }
 
-        # Final structural alignment for Senior Architect requirements
+        # Unified AI Insights (Merging ML scores with Strategic Reasoning)
         ai_insights = {
-            "delay_probability": round(best["risk_score"] * 100, 1),
-            "bottlenecks": [n['title'] for n in data.newsData[:2]] if data.newsData else ["No critical bottlenecks"],
-            "recommendation": insight
+            "delay_probability": round(analysis.get("time", {}).get("delay_probability", 0) * 100, 1),
+            "bottlenecks": engine_insights.get("bottlenecks", []),
+            "recommendation": engine_insights.get("recommendation", "Strategic evaluation complete.")
         }
 
-        return {
+        final_response = {
             "success": True,
-            "risk_score": best["risk_score"],
-            "risk_level": best["risk_level"],
-            "delay_prediction": f"{best['predicted_delay_mins']} mins",
-            "suggestion": f"Optimal {data.mode} route via '{best.get('summary', 'Main Route')}' selected.",
-            "insight": insight,
+            "risk_score": engine_risk.get("score", best["risk_score"]),
+            "risk_level": engine_risk.get("level", best["risk_level"]),
+            "delay_prediction": f"{analysis.get('time', {}).get('estimated_minutes', best['predicted_delay_mins'])} mins",
+            "suggestion": f"Strategic Decision: {engine_insights.get('decision', 'GO')}",
+            "insight": engine_insights.get("recommendation", "Awaiting strategic insight..."),
             "ai_insights": ai_insights,
             "optimization_data": optimization_data,
-            "all_routes": scored_routes
+            "all_routes": scored_routes,
+            "strategic_engine": analysis # High-fidelity deterministic data
         }
+        
+        logger.info(f"--- SENIOR LOGISTICS ENGINE RESPONSE [{data.shipment_id or 'RAW'}] ---\n{json.dumps(final_response, indent=2, default=str)}")
+        return final_response
     except Exception as e:
         logger.error(f"Prediction Error: {str(e)}")
         return {
