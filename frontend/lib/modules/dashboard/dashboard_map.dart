@@ -25,16 +25,19 @@ class _DashboardMapState extends State<DashboardMap> {
   void didUpdateWidget(covariant DashboardMap oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Force fit bounds if the shipment ID changed or if we just got a path
-    final pathChanged = widget.shipment.route.path.length != oldWidget.shipment.route.path.length;
-    final idChanged = widget.shipment.shipmentId != oldWidget.shipment.shipmentId;
-    
+    final pathChanged = widget.shipment.route.path.length !=
+        oldWidget.shipment.route.path.length;
+    final idChanged =
+        widget.shipment.shipmentId != oldWidget.shipment.shipmentId;
+
     _syncCamera(forceFit: idChanged || pathChanged);
   }
 
   @override
   Widget build(BuildContext context) {
     final path = widget.shipment.route.path;
-    final current = MapUtils.fallbackCenter(path, widget.shipment.currentLocation);
+    final current =
+        MapUtils.fallbackCenter(path, widget.shipment.currentLocation);
 
     return GoogleMap(
       initialCameraPosition: CameraPosition(target: current, zoom: 8),
@@ -43,7 +46,7 @@ class _DashboardMapState extends State<DashboardMap> {
         _syncCamera(forceFit: true);
       },
       myLocationButtonEnabled: false,
-      zoomControlsEnabled: true, 
+      zoomControlsEnabled: true,
       compassEnabled: true,
       mapToolbarEnabled: true,
       trafficEnabled: true,
@@ -69,13 +72,14 @@ class _DashboardMapState extends State<DashboardMap> {
         position: current,
         // Using a high-visibility Blue pin by default, or Risk-Color if high
         icon: BitmapDescriptor.defaultMarkerWithHue(
-          widget.shipment.riskLevel == 'LOW' 
-            ? BitmapDescriptor.hueAzure 
-            : riskMarkerHue(widget.shipment.riskLevel),
+          widget.shipment.riskLevel == RiskLevel.low
+              ? BitmapDescriptor.hueAzure
+              : riskMarkerHue(widget.shipment.riskLevel),
         ),
         infoWindow: InfoWindow(
           title: 'Shipment ${widget.shipment.shipmentId}',
-          snippet: '${widget.shipment.currentPlace} (${widget.shipment.speedKmH.toInt()} km/h)',
+          snippet:
+              '${widget.shipment.currentPlace} (${widget.shipment.speedKmH.toInt()} km/h)',
         ),
         zIndexInt: 5, // Keep pin on top
       ),
@@ -86,7 +90,8 @@ class _DashboardMapState extends State<DashboardMap> {
         Marker(
           markerId: const MarkerId('origin'),
           position: path.first,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
           infoWindow: InfoWindow(title: 'Origin: ${widget.shipment.origin}'),
         ),
       );
@@ -95,8 +100,10 @@ class _DashboardMapState extends State<DashboardMap> {
         Marker(
           markerId: const MarkerId('destination'),
           position: path.last,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-          infoWindow: InfoWindow(title: 'Destination: ${widget.shipment.destination}'),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow:
+              InfoWindow(title: 'Destination: ${widget.shipment.destination}'),
         ),
       );
     }
@@ -109,7 +116,8 @@ class _DashboardMapState extends State<DashboardMap> {
     if (controller == null) return;
 
     final path = widget.shipment.route.path;
-    final current = MapUtils.fallbackCenter(path, widget.shipment.currentLocation);
+    final current =
+        MapUtils.fallbackCenter(path, widget.shipment.currentLocation);
     final viewportKey =
         '${widget.shipment.shipmentId}:${current.latitude}:${current.longitude}:${path.length}';
 

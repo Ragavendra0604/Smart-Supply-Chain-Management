@@ -7,8 +7,63 @@ import '../../widgets/metric_chip.dart';
 import '../../widgets/add_shipment_dialog.dart';
 import '../optimization/optimization_screen.dart';
 
-class DashboardScreen extends StatelessWidget {
+import '../../services/walkthrough_service.dart';
+
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  final GlobalKey _keyStopButton = GlobalKey();
+  final GlobalKey _keySpeedSlider = GlobalKey();
+  final GlobalKey _keyStats = GlobalKey();
+  final GlobalKey _keyShipmentList = GlobalKey();
+  final GlobalKey _keyAddButton = GlobalKey();
+
+  final WalkthroughService _walkthroughService = WalkthroughService();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndShowWalkthrough();
+    });
+  }
+
+  Future<void> _checkAndShowWalkthrough() async {
+    if (!mounted) return;
+
+    final controller = context.read<DashboardController>();
+    if (controller.recentShipments.isEmpty || controller.isBootstrapping) {
+      // Wait for data to load if it's currently loading or empty
+      Future.delayed(
+          const Duration(milliseconds: 500), _checkAndShowWalkthrough);
+      return;
+    }
+
+    final completed = await _walkthroughService.isWalkthroughCompleted();
+    if (!completed) {
+      _startWalkthrough();
+    }
+  }
+
+  void _startWalkthrough() {
+    final targets = _walkthroughService.createDashboardTargets(
+      keyStopButton: _keyStopButton,
+      keySpeedSlider: _keySpeedSlider,
+      keyStats: _keyStats,
+      keyShipmentList: _keyShipmentList,
+      keyAddButton: _keyAddButton,
+    );
+
+    _walkthroughService.showWalkthrough(
+      context: context,
+      targets: targets,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -16,13 +71,25 @@ class DashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Supply Chain Overview'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline),
+            tooltip: 'Show Walkthrough',
+            onPressed: _startWalkthrough,
+          ),
           Consumer<DashboardController>(
             builder: (context, controller, _) => IconButton(
+              key: _keyStopButton,
               icon: Icon(
-                controller.isGlobalStopped ? Icons.play_circle_outline : Icons.power_settings_new,
-                color: controller.isGlobalStopped ? AppTheme.success : AppTheme.danger,
+                controller.isGlobalStopped
+                    ? Icons.play_circle_outline
+                    : Icons.power_settings_new,
+                color: controller.isGlobalStopped
+                    ? AppTheme.success
+                    : AppTheme.danger,
               ),
-              tooltip: controller.isGlobalStopped ? 'Resume All Services' : 'Stop All Services',
+              tooltip: controller.isGlobalStopped
+                  ? 'Resume All Services'
+                  : 'Stop All Services',
               onPressed: () {
                 if (controller.isGlobalStopped) {
                   controller.toggleGlobalStop(false);
@@ -54,20 +121,25 @@ class DashboardScreen extends StatelessWidget {
               padding: const EdgeInsets.all(16),
               children: [
                 if (controller.isGlobalStopped) ...[
-                    _NotificationBar(
-                      message: 'SYSTEM HALTED: Global Stop Active',
-                      color: AppTheme.danger,
-                      actionLabel: 'RESUME',
-                      onAction: () => controller.toggleGlobalStop(false),
-                      onClose: () => controller.errorMessage = null,
-                    ),
+                  _NotificationBar(
+                    message: 'SYSTEM HALTED: Global Stop Active',
+                    color: AppTheme.danger,
+                    actionLabel: 'RESUME',
+                    onAction: () => controller.toggleGlobalStop(false),
+                    onClose: () => controller.errorMessage = null,
+                  ),
                   const SizedBox(height: 16),
                 ],
-                 const SizedBox(height: 16),
-                 _SimulationSpeedController(controller: controller),
-                 const SizedBox(height: 24),
-                 _SummaryStats(shipments: controller.recentShipments),
-
+                const SizedBox(height: 16),
+                _SimulationSpeedController(
+                  key: _keySpeedSlider,
+                  controller: controller,
+                ),
+                const SizedBox(height: 24),
+                _SummaryStats(
+                  key: _keyStats,
+                  shipments: controller.recentShipments,
+                ),
                 if (controller.errorMessage != null) ...[
                   const SizedBox(height: 16),
                   _NotificationBar(
@@ -96,8 +168,15 @@ class DashboardScreen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                ...controller.recentShipments.map(
-                  (s) => _ShipmentCard(shipment: s),
+                Container(
+                  key: _keyShipmentList,
+                  child: Column(
+                    children: controller.recentShipments
+                        .map(
+                          (s) => _ShipmentCard(shipment: s),
+                        )
+                        .toList(),
+                  ),
                 ),
               ],
             ),
@@ -105,6 +184,7 @@ class DashboardScreen extends StatelessWidget {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        key: _keyAddButton,
         onPressed: () {
           showDialog(
             context: context,
@@ -209,7 +289,7 @@ class _NotificationBar extends StatelessWidget {
 
 class _SummaryStats extends StatelessWidget {
   final List<Shipment> shipments;
-  const _SummaryStats({required this.shipments});
+  const _SummaryStats({super.key, required this.shipments});
 
   @override
   Widget build(BuildContext context) {
@@ -381,8 +461,17 @@ class _ShipmentCard extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('SPEED', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: AppTheme.textMuted, letterSpacing: 0.5)),
-                            Text('${shipment.speedKmH.toStringAsFixed(0)} km/h', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: AppTheme.primary)),
+                            const Text('SPEED',
+                                style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.textMuted,
+                                    letterSpacing: 0.5)),
+                            Text('${shipment.speedKmH.toStringAsFixed(0)} km/h',
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.primary)),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -390,8 +479,13 @@ class _ShipmentCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
                             value: (shipment.speedKmH / 120).clamp(0.0, 1.0),
-                            backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                            color: shipment.speedKmH > 90 ? AppTheme.danger : (shipment.speedKmH > 70 ? AppTheme.warning : AppTheme.primary),
+                            backgroundColor:
+                                AppTheme.primary.withValues(alpha: 0.1),
+                            color: shipment.speedKmH > 90
+                                ? AppTheme.danger
+                                : (shipment.speedKmH > 70
+                                    ? AppTheme.warning
+                                    : AppTheme.primary),
                             minHeight: 6,
                           ),
                         ),
@@ -405,12 +499,14 @@ class _ShipmentCard extends StatelessWidget {
                           controller.simulatingShipmentId ==
                               shipment.shipmentId;
                       final bool isStopped = shipment.status == 'STOPPED';
-                      final String buttonLabel = isSimulatingThis 
-                          ? 'Stop' 
+                      final String buttonLabel = isSimulatingThis
+                          ? 'Stop'
                           : (isStopped ? 'Resume' : 'Simulate');
-                      final IconData buttonIcon = isSimulatingThis 
-                          ? Icons.stop_circle 
-                          : (isStopped ? Icons.play_circle_filled_rounded : Icons.play_arrow_rounded);
+                      final IconData buttonIcon = isSimulatingThis
+                          ? Icons.stop_circle
+                          : (isStopped
+                              ? Icons.play_circle_filled_rounded
+                              : Icons.play_arrow_rounded);
 
                       return ElevatedButton.icon(
                         onPressed: () {
@@ -419,7 +515,9 @@ class _ShipmentCard extends StatelessWidget {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(isStarting
-                                  ? (isStopped ? '▶️ Simulation resumed' : '🚀 Simulation started for ${shipment.shipmentId}')
+                                  ? (isStopped
+                                      ? '▶️ Simulation resumed'
+                                      : '🚀 Simulation started for ${shipment.shipmentId}')
                                   : '🛑 Simulation stopped'),
                               duration: const Duration(seconds: 2),
                               behavior: SnackBarBehavior.floating,
@@ -476,7 +574,7 @@ class _ShipmentCard extends StatelessWidget {
 
 class _SimulationSpeedController extends StatelessWidget {
   final DashboardController controller;
-  const _SimulationSpeedController({required this.controller});
+  const _SimulationSpeedController({super.key, required this.controller});
 
   @override
   Widget build(BuildContext context) {
@@ -508,7 +606,8 @@ class _SimulationSpeedController extends StatelessWidget {
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppTheme.primary,
                   borderRadius: BorderRadius.circular(20),
@@ -546,8 +645,10 @@ class _SimulationSpeedController extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Real-time (1x)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
-                Text('Accelerated (10x)', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                Text('Real-time (1x)',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                Text('Accelerated (10x)',
+                    style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
               ],
             ),
           ),

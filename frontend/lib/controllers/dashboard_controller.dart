@@ -213,7 +213,7 @@ class DashboardController extends ChangeNotifier {
       errorMessage = 'Failed to create shipment: ${e.toString()}';
       _apiService.logToServer(
           'ERROR', 'Manual shipment creation failed', {'error': e.toString()});
-      throw e;
+      rethrow;
     } finally {
       notifyListeners();
     }
