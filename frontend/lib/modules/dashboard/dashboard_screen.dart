@@ -115,70 +115,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             return _EmptyDashboard(onRefresh: controller.bootstrap);
           }
 
+          final isWide = MediaQuery.of(context).size.width > 900;
+          final content = isWide 
+            ? _buildWideLayout(context, controller) 
+            : _buildMobileLayout(context, controller);
+
           return RefreshIndicator(
             onRefresh: controller.bootstrap,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (controller.isGlobalStopped) ...[
-                  _NotificationBar(
-                    message: 'SYSTEM HALTED: Global Stop Active',
-                    color: AppTheme.danger,
-                    actionLabel: 'RESUME',
-                    onAction: () => controller.toggleGlobalStop(false),
-                    onClose: () => controller.errorMessage = null,
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                const SizedBox(height: 16),
-                _SimulationSpeedController(
-                  key: _keySpeedSlider,
-                  controller: controller,
-                ),
-                const SizedBox(height: 24),
-                _SummaryStats(
-                  key: _keyStats,
-                  shipments: controller.recentShipments,
-                ),
-                if (controller.errorMessage != null) ...[
-                  const SizedBox(height: 16),
-                  _NotificationBar(
-                    message: controller.errorMessage!,
-                    color: AppTheme.danger,
-                    onClose: () => controller.errorMessage = null,
-                  ),
-                ],
-                if (controller.successMessage != null) ...[
-                  const SizedBox(height: 16),
-                  _NotificationBar(
-                    message: controller.successMessage!,
-                    color: AppTheme.success,
-                    onClose: () => controller.successMessage = null,
-                  ),
-                ],
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Recent Shipments',
-                      style: AppTheme.light.textTheme.titleLarge,
-                    ),
-                    TextButton(onPressed: () {}, child: const Text('View All')),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  key: _keyShipmentList,
-                  child: Column(
-                    children: controller.recentShipments
-                        .map(
-                          (s) => _ShipmentCard(shipment: s),
-                        )
-                        .toList(),
-                  ),
-                ),
-              ],
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1400),
+                child: content,
+              ),
             ),
           );
         },
@@ -195,6 +143,147 @@ class _DashboardScreenState extends State<DashboardScreen> {
         label: const Text('New Shipment'),
         backgroundColor: AppTheme.primary,
         foregroundColor: Colors.white,
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context, DashboardController controller) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (controller.isGlobalStopped) ...[
+          _NotificationBar(
+            message: 'SYSTEM HALTED: Global Stop Active',
+            color: AppTheme.danger,
+            actionLabel: 'RESUME',
+            onAction: () => controller.toggleGlobalStop(false),
+            onClose: () => controller.errorMessage = null,
+          ),
+          const SizedBox(height: 16),
+        ],
+        const SizedBox(height: 16),
+        _SimulationSpeedController(
+          key: _keySpeedSlider,
+          controller: controller,
+        ),
+        const SizedBox(height: 24),
+        _SummaryStats(
+          key: _keyStats,
+          shipments: controller.recentShipments,
+        ),
+        _buildMessages(controller),
+        const SizedBox(height: 24),
+        _buildShipmentListHeader(),
+        const SizedBox(height: 12),
+        _buildShipmentList(controller),
+      ],
+    );
+  }
+
+  Widget _buildWideLayout(BuildContext context, DashboardController controller) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Main Column: Shipments
+          Expanded(
+            flex: 3,
+            child: ListView(
+              children: [
+                _buildShipmentListHeader(),
+                const SizedBox(height: 16),
+                _buildShipmentList(controller),
+              ],
+            ),
+          ),
+          const SizedBox(width: 32),
+          // Sidebar: Stats & Controls
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (controller.isGlobalStopped) ...[
+                    _NotificationBar(
+                      message: 'SYSTEM HALTED',
+                      color: AppTheme.danger,
+                      actionLabel: 'RESUME',
+                      onAction: () => controller.toggleGlobalStop(false),
+                      onClose: () => controller.errorMessage = null,
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                  _SummaryStats(
+                    key: _keyStats,
+                    shipments: controller.recentShipments,
+                  ),
+                  const SizedBox(height: 24),
+                  _SimulationSpeedController(
+                    key: _keySpeedSlider,
+                    controller: controller,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildMessages(controller),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessages(DashboardController controller) {
+    return Column(
+      children: [
+        if (controller.errorMessage != null) ...[
+          const SizedBox(height: 16),
+          _NotificationBar(
+            message: controller.errorMessage!,
+            color: AppTheme.danger,
+            onClose: () => controller.errorMessage = null,
+          ),
+        ],
+        if (controller.successMessage != null) ...[
+          const SizedBox(height: 16),
+          _NotificationBar(
+            message: controller.successMessage!,
+            color: AppTheme.success,
+            onClose: () => controller.successMessage = null,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildShipmentListHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          'Recent Shipments',
+          style: AppTheme.light.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        TextButton.icon(
+          onPressed: () {},
+          icon: const Icon(Icons.filter_list, size: 18),
+          label: const Text('View All'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildShipmentList(DashboardController controller) {
+    return Container(
+      key: _keyShipmentList,
+      child: Column(
+        children: controller.recentShipments
+            .map((s) => _ShipmentCard(shipment: s))
+            .toList(),
       ),
     );
   }

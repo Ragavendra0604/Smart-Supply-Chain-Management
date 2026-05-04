@@ -14,6 +14,11 @@ class OptimizationScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final opt = shipment.ai.optimization;
     final allRoutes = shipment.ai.allRoutes;
+    final isWide = MediaQuery.of(context).size.width > 900;
+
+    final content = isWide
+        ? _buildWideLayout(context, opt, allRoutes)
+        : _buildMobileLayout(context, opt, allRoutes);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FF),
@@ -23,35 +28,103 @@ class OptimizationScreen extends StatelessWidget {
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Header(shipment: shipment),
-            const SizedBox(height: 24),
-            _RiskBanner(shipment: shipment),
-            const SizedBox(height: 24),
-            if (opt != null) ...[
-              _ComparisonSection(opt: opt),
-              const SizedBox(height: 24),
-            ],
-            if (allRoutes.isNotEmpty) ...[
-              _AllRoutesSection(routes: allRoutes),
-              const SizedBox(height: 24),
-            ],
-            _AiReasoning(
-              explanation: shipment.ai.explanation,
-              suggestion: shipment.ai.suggestion,
-            ),
-            const SizedBox(height: 24),
-            if (shipment.news.isNotEmpty) _NewsSection(news: shipment.news),
-            const SizedBox(height: 24),
-            _WhatIfSimulator(shipment: shipment),
-            const SizedBox(height: 24),
-            _ActionButtons(shipment: shipment),
-          ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child: content,
         ),
+      ),
+    );
+  }
+
+  Widget _buildMobileLayout(BuildContext context,
+      ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Header(shipment: shipment),
+          const SizedBox(height: 24),
+          _RiskBanner(shipment: shipment),
+          const SizedBox(height: 24),
+          if (opt != null) ...[
+            _ComparisonSection(opt: opt),
+            const SizedBox(height: 24),
+          ],
+          if (allRoutes.isNotEmpty) ...[
+            _AllRoutesSection(routes: allRoutes),
+            const SizedBox(height: 24),
+          ],
+          _AiReasoning(
+            explanation: shipment.ai.explanation,
+            suggestion: shipment.ai.suggestion,
+          ),
+          const SizedBox(height: 24),
+          if (shipment.news.isNotEmpty) _NewsSection(news: shipment.news),
+          const SizedBox(height: 24),
+          _WhatIfSimulator(shipment: shipment),
+          const SizedBox(height: 24),
+          _ActionButtons(shipment: shipment),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWideLayout(BuildContext context,
+      ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Main Column: Reasoning & Comparison
+          Expanded(
+            flex: 3,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Header(shipment: shipment),
+                  const SizedBox(height: 24),
+                  _RiskBanner(shipment: shipment),
+                  const SizedBox(height: 24),
+                  if (opt != null) ...[
+                    _ComparisonSection(opt: opt),
+                    const SizedBox(height: 24),
+                  ],
+                  _AiReasoning(
+                    explanation: shipment.ai.explanation,
+                    suggestion: shipment.ai.suggestion,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 32),
+          // Sidebar: Routes, News & Actions
+          Expanded(
+            flex: 2,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (allRoutes.isNotEmpty) ...[
+                    _AllRoutesSection(routes: allRoutes),
+                    const SizedBox(height: 24),
+                  ],
+                  if (shipment.news.isNotEmpty) ...[
+                    _NewsSection(news: shipment.news),
+                    const SizedBox(height: 24),
+                  ],
+                  _WhatIfSimulator(shipment: shipment),
+                  const SizedBox(height: 24),
+                  _ActionButtons(shipment: shipment),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
