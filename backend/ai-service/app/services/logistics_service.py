@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.models.ml_model import get_ml_model
 from app.utils.logger import logger
 from app.services.ai_client import get_genai_client
-from app.models.schemas import TacticalDecision
+from app.models.schemas import TacticalDecision, DeliverySummaryRequest, DeliverySummaryResponse
 
 class InputData(BaseModel):
     shipment_id: Optional[str] = None
@@ -311,3 +311,157 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
     except Exception as e:
         logger.error(f"Gemini Engine Wrapper Error: {e}")
         return get_fallback_engine_response("System Error")
+
+
+# ─────────────────────────────────────────────────────────────
+#  DELIVERY COMPLETION ENGINE
+#  Called once when a shipment reaches DELIVERED status.
+#  Returns a deterministic performance report + AI narrative.
+# ─────────────────────────────────────────────────────────────
+
+def generate_delivery_summary(req: DeliverySummaryRequest) -> dict:
+    """
+    Post-delivery intelligence report.
+    Deterministic metrics are computed first (always available).
+    Gemini enriches with narrative + maintenance assessment.
+    """
+    # --- 1. DETERMINISTIC PERFORMANCE METRICS ---
+    delay_variance = round(req.actual_duration_min - req.planned_duration_min, 1)
+    on_time = delay_variance <= 5.0  # 5-min tolerance
+
+    # Efficiency = how close to plan (capped 0–1)
+    if req.planned_duration_min > 0:
+        raw_eff = 1.0 - (abs(delay_variance) / req.planned_duration_min)
+        efficiency_rating = round(max(0.0, min(1.0, raw_eff)), 3)
+    else:
+        efficiency_rating = 1.0 if on_time else 0.6
+
+    # Grade: A ≥0.90, B ≥0.75, C ≥0.55, D <0.55
+    if efficiency_rating >= 0.90:
+        grade = "A"
+    elif efficiency_rating >= 0.75:
+        grade = "B"
+    elif efficiency_rating >= 0.55:
+        grade = "C"
+    else:
+        grade = "D"
+
+    # Maintenance flag: high risk score OR poor efficiency
+    maintenance_flag = req.peak_risk_score >= 0.7 or efficiency_rating < 0.55
+
+    # Deterministic fallback (returned if AI call fails)
+    delay_label = f"{abs(delay_variance):.0f} min{'s' if abs(delay_variance) != 1 else ''}"
+    timing_text = f"{'on time' if on_time else f'delayed by {delay_label}'}"
+    fallback_summary = (
+        f"Shipment {req.shipment_id} from {req.origin} to {req.destination} "
+        f"via {req.mode} was delivered {timing_text}. "
+        f"Total distance: {req.distance_km:.1f} km. "
+        f"Fuel used: {req.total_fuel:.1f} L. "
+        f"Overall cost: ${req.total_cost:.2f}. "
+        f"Performance grade: {grade}."
+    )
+    fallback_insights = [
+        f"Delivery was {'on time ✅' if on_time else f'late by {delay_label} ⚠️'}",
+        f"Efficiency rating: {efficiency_rating * 100:.0f}%",
+        f"Average speed: {req.avg_speed_kmh:.1f} km/h",
+        f"Peak risk encountered: {req.peak_risk_score * 100:.0f}%",
+        f"Weather: {req.weather_encountered}",
+    ]
+    fallback_recommendation = (
+        "Schedule routine maintenance." if maintenance_flag
+        else f"Vehicle is ready for the next assignment."
+    )
+
+    # --- 2. AI NARRATIVE ENRICHMENT ---
+    client = get_genai_client()
+    if client is None:
+        return {
+            "success": True,
+            "on_time": on_time,
+            "delay_variance_mins": delay_variance,
+            "efficiency_rating": efficiency_rating,
+            "performance_grade": grade,
+            "summary": fallback_summary,
+            "key_insights": fallback_insights,
+            "maintenance_flag": maintenance_flag,
+            "maintenance_reason": "Heuristic: high risk or low efficiency" if maintenance_flag else None,
+            "next_shipment_recommendation": fallback_recommendation,
+            "ai_generated": False,
+        }
+
+    try:
+        prompt = f"""
+SYSTEM ROLE: Senior Logistics Performance Analyst
+
+You have just completed delivery analysis for a shipment. 
+Generate a concise, professional post-delivery intelligence report in JSON.
+
+DELIVERY TELEMETRY:
+- Shipment ID: {req.shipment_id}
+- Route: {req.origin} → {req.destination} via {req.mode}
+- Cargo: {req.cargo_type} | Priority: {req.priority} | Perishable: {req.is_perishable}
+- Distance: {req.distance_km:.1f} km
+- Planned Duration: {req.planned_duration_min:.0f} mins | Actual: {req.actual_duration_min:.0f} mins
+- Delay Variance: {delay_variance:+.1f} mins ({"ON TIME" if on_time else "LATE"})
+- Avg Speed: {req.avg_speed_kmh:.1f} km/h
+- Total Cost: ${req.total_cost:.2f} | Fuel: {req.total_fuel:.1f} L
+- Peak Risk Score: {req.peak_risk_score:.2f}
+- Weather Encountered: {req.weather_encountered}
+- News Disruptions: {req.news_disruptions}
+- Pre-computed Efficiency: {efficiency_rating:.2f} | Grade: {grade}
+- Maintenance Flag: {maintenance_flag}
+
+TASK:
+1. Write a 2–3 sentence professional SUMMARY of this delivery's performance.
+2. List exactly 4 KEY INSIGHTS as short bullets (under 12 words each).
+3. Assess if MAINTENANCE is needed and why (max 1 sentence).
+4. Write a NEXT_SHIPMENT_RECOMMENDATION (max 1 sentence).
+
+OUTPUT SCHEMA (JSON ONLY, NO EXTRA TEXT):
+{{
+  "summary": "...",
+  "key_insights": ["...", "...", "...", "..."],
+  "maintenance_reason": "..." or null,
+  "next_shipment_recommendation": "..."
+}}
+"""
+        model_name = req.model_name or "gemini-2.5-flash"
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config={"response_mime_type": "application/json"},
+        )
+
+        if response and response.text:
+            ai_data = json.loads(response.text.strip())
+            return {
+                "success": True,
+                "on_time": on_time,
+                "delay_variance_mins": delay_variance,
+                "efficiency_rating": efficiency_rating,
+                "performance_grade": grade,
+                "summary": ai_data.get("summary", fallback_summary),
+                "key_insights": ai_data.get("key_insights", fallback_insights),
+                "maintenance_flag": maintenance_flag,
+                "maintenance_reason": ai_data.get("maintenance_reason"),
+                "next_shipment_recommendation": ai_data.get("next_shipment_recommendation", fallback_recommendation),
+                "ai_generated": True,
+            }
+
+    except Exception as e:
+        logger.error(f"Delivery Summary AI Error: {e}")
+
+    # Fallback if AI fails
+    return {
+        "success": True,
+        "on_time": on_time,
+        "delay_variance_mins": delay_variance,
+        "efficiency_rating": efficiency_rating,
+        "performance_grade": grade,
+        "summary": fallback_summary,
+        "key_insights": fallback_insights,
+        "maintenance_flag": maintenance_flag,
+        "maintenance_reason": "Heuristic: high risk or low efficiency" if maintenance_flag else None,
+        "next_shipment_recommendation": fallback_recommendation,
+        "ai_generated": False,
+    }

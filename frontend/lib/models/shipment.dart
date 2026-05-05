@@ -20,6 +20,7 @@ class Shipment {
     this.speedKmH = 0,
     this.currentStepIndex = 0,
     this.simulationSpeedModifier = 1.0,
+    this.deliverySummary,
   });
 
   final String id;
@@ -37,6 +38,7 @@ class Shipment {
   final double speedKmH;
   final int currentStepIndex;
   final double? simulationSpeedModifier;
+  final DeliverySummary? deliverySummary;
 
   Shipment copyWith({
     String? id,
@@ -54,6 +56,7 @@ class Shipment {
     double? speedKmH,
     int? currentStepIndex,
     double? simulationSpeedModifier,
+    DeliverySummary? deliverySummary,
   }) {
     return Shipment(
       id: id ?? this.id,
@@ -72,6 +75,7 @@ class Shipment {
       currentStepIndex: currentStepIndex ?? this.currentStepIndex,
       simulationSpeedModifier:
           simulationSpeedModifier ?? this.simulationSpeedModifier,
+      deliverySummary: deliverySummary ?? this.deliverySummary,
     );
   }
 
@@ -158,6 +162,9 @@ class Shipment {
       currentStepIndex: numValue(data['current_step_index']).toInt(),
       simulationSpeedModifier:
           numValue(data['simulation_speed_modifier'] ?? 1.0).toDouble(),
+      deliverySummary: data['delivery_summary'] != null
+          ? DeliverySummary.fromMap(mapValue(data['delivery_summary']))
+          : null,
     );
   }
 }
@@ -370,6 +377,45 @@ class ShipmentOptimizationValue {
       time: stringValue(data['time'], fallback: '--'),
       cost: numValue(data['cost']),
       fuel: numValue(data['fuel']),
+    );
+  }
+}
+
+class DeliverySummary {
+  const DeliverySummary({
+    required this.onTime,
+    required this.delayVarianceMins,
+    required this.efficiencyRating,
+    required this.performanceGrade,
+    required this.summary,
+    required this.keyInsights,
+    required this.maintenanceFlag,
+    this.maintenanceReason,
+    required this.nextShipmentRecommendation,
+  });
+
+  final bool onTime;
+  final num delayVarianceMins;
+  final num efficiencyRating;
+  final String performanceGrade;
+  final String summary;
+  final List<String> keyInsights;
+  final bool maintenanceFlag;
+  final String? maintenanceReason;
+  final String nextShipmentRecommendation;
+
+  factory DeliverySummary.fromMap(Map<String, dynamic> data) {
+    return DeliverySummary(
+      onTime: data['on_time'] == true,
+      delayVarianceMins: numValue(data['delay_variance_mins']),
+      efficiencyRating: numValue(data['efficiency_rating']),
+      performanceGrade: stringValue(data['performance_grade'], fallback: 'N/A'),
+      summary: stringValue(data['summary'], fallback: ''),
+      keyInsights: listValue(data['key_insights']).map((e) => e.toString()).toList(),
+      maintenanceFlag: data['maintenance_flag'] == true,
+      maintenanceReason: stringValue(data['maintenance_reason'], fallback: ''),
+      nextShipmentRecommendation:
+          stringValue(data['next_shipment_recommendation'], fallback: ''),
     );
   }
 }

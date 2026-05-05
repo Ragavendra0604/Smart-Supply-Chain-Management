@@ -11,7 +11,9 @@ from app.utils.logger import logger
 from app.services.logistics_service import (
     InputData, 
     score_and_rank_routes, 
-    generate_logistics_insight
+    generate_logistics_insight,
+    generate_delivery_summary,
+    DeliverySummaryRequest
 )
 
 async def handle_pubsub_event(request: Request):
@@ -361,3 +363,55 @@ def handle_predict(data: InputData):
             "delay_prediction": "0 mins", "suggestion": "Proceed normally",
             "insight": "AI temporarily unavailable.", "all_routes": []
         }
+
+
+async def handle_delivery_summary(request: Request):
+    """
+    POST /delivery-summary
+    Called by the API Gateway when a shipment status transitions to DELIVERED.
+    Generates AI performance report and persists it to Firestore.
+    """
+    try:
+        body = await request.json()
+        req = DeliverySummaryRequest(**body)
+    except Exception as e:
+        logger.error(f"Delivery Summary - Bad Request: {e}")
+        return JSONResponse(status_code=422, content={"error": f"Invalid request body: {e}"})
+
+    try:
+        logger.info(f"[DELIVERY] Generating summary for {req.shipment_id}")
+        summary = generate_delivery_summary(req)
+
+        # --- PERSIST DELIVERY RECORD TO FIRESTORE ---
+        try:
+            delivered_at = datetime.now(timezone.utc)
+            firestore_db = db
+            if callable(firestore_db):
+                firestore_db = firestore_db()
+            
+            doc_ref = firestore_db.collection("shipments").document(req.shipment_id)
+            doc_ref.set({
+                "status": "DELIVERED",
+                "delivered_at": delivered_at,
+                "updated_at": delivered_at,
+                "delivery_summary": {
+                    "on_time": summary["on_time"],
+                    "delay_variance_mins": summary["delay_variance_mins"],
+                    "efficiency_rating": summary["efficiency_rating"],
+                    "performance_grade": summary["performance_grade"],
+                    "maintenance_flag": summary["maintenance_flag"],
+                    "maintenance_reason": summary.get("maintenance_reason"),
+                    "ai_generated": summary.get("ai_generated", False),
+                    "generated_at": delivered_at,
+                }
+            }, merge=True)
+            logger.info(f"[DELIVERY] Firestore updated for {req.shipment_id} → DELIVERED")
+        except Exception as fs_err:
+            # Non-fatal — return summary even if Firestore write fails
+            logger.error(f"[DELIVERY] Firestore write failed: {fs_err}")
+
+        return JSONResponse(status_code=200, content=summary)
+
+    except Exception as e:
+        logger.error(f"[DELIVERY] Summary generation failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})

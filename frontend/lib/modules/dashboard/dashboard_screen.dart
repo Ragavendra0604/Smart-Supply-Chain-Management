@@ -584,10 +584,36 @@ class _ShipmentCard extends StatelessWidget {
                   const Spacer(),
                   Consumer<DashboardController>(
                     builder: (context, controller, _) {
-                      final isSimulatingThis = controller.isSimulating &&
+                      final bool isSimulatingThis = controller.isSimulating &&
                           controller.simulatingShipmentId ==
                               shipment.shipmentId;
                       final bool isStopped = shipment.status == 'STOPPED';
+                      final bool isDelivered = shipment.status == 'DELIVERED';
+
+                      if (isDelivered) {
+                        return ElevatedButton.icon(
+                          onPressed: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) =>
+                                  _DeliverySummaryDialog(shipment: shipment),
+                            );
+                          },
+                          icon: const Icon(Icons.analytics_outlined, size: 18),
+                          label: const Text('Summary'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                AppTheme.success.withValues(alpha: 0.1),
+                            foregroundColor: AppTheme.success,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        );
+                      }
+
                       final String buttonLabel = isSimulatingThis
                           ? 'Stop'
                           : (isStopped ? 'Resume' : 'Simulate');
@@ -658,6 +684,245 @@ class _ShipmentCard extends StatelessWidget {
       default:
         return AppTheme.textMuted;
     }
+  }
+}
+
+class _DeliverySummaryDialog extends StatelessWidget {
+  final Shipment shipment;
+  const _DeliverySummaryDialog({required this.shipment});
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = shipment.deliverySummary;
+    if (summary == null) {
+      return const AlertDialog(
+        title: Text('No Summary Available'),
+        content: Text('Delivery analytics are still being processed.'),
+      );
+    }
+
+    final gradeColor = _getGradeColor(summary.performanceGrade);
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Delivery Intelligence',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        'Post-Arrival AI Performance Report',
+                        style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: gradeColor.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: gradeColor, width: 2),
+                    ),
+                    child: Center(
+                      child: Text(
+                        summary.performanceGrade,
+                        style: TextStyle(
+                          color: gradeColor,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    _SummaryRow(
+                      label: 'On-Time Status',
+                      value: summary.onTime ? 'ON TIME ✅' : 'DELAYED ⚠️',
+                      color: summary.onTime ? AppTheme.success : AppTheme.danger,
+                    ),
+                    const Divider(height: 24),
+                    _SummaryRow(
+                      label: 'Efficiency Rating',
+                      value: '${(summary.efficiencyRating * 100).toStringAsFixed(0)}%',
+                      color: AppTheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'AI SUMMARY',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.0,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                summary.summary,
+                style: const TextStyle(height: 1.5, fontSize: 14),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'KEY INSIGHTS',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.0,
+                  color: AppTheme.textMuted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...summary.keyInsights.map((insight) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline,
+                            size: 14, color: AppTheme.success),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(insight,
+                                style: const TextStyle(fontSize: 13))),
+                      ],
+                    ),
+                  )),
+              const SizedBox(height: 24),
+              if (summary.maintenanceFlag)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.danger.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.danger.withValues(alpha: 0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.build_outlined, color: AppTheme.danger),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'MAINTENANCE REQUIRED',
+                              style: TextStyle(
+                                color: AppTheme.danger,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                              ),
+                            ),
+                            Text(
+                              summary.maintenanceReason ?? 'Service inspection recommended.',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.all(16),
+                  ),
+                  child: const Text('Close Report'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getGradeColor(String grade) {
+    switch (grade) {
+      case 'A':
+        return AppTheme.success;
+      case 'B':
+        return AppTheme.primary;
+      case 'C':
+        return AppTheme.warning;
+      case 'D':
+        return AppTheme.danger;
+      default:
+        return AppTheme.textMuted;
+    }
+  }
+}
+
+class _SummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _SummaryRow({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
+    );
   }
 }
 

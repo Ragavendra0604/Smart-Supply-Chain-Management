@@ -630,6 +630,20 @@ class DashboardController extends ChangeNotifier {
       );
       if (isDestination) {
         _stopSimulation();
+        // Trigger post-delivery AI summary and state finalization
+        try {
+          final summaryData = await _apiService.completeShipment(targetId);
+          if (activeShipmentId == targetId) {
+            latestShipment = latestShipment!.copyWith(
+              status: 'DELIVERED',
+              deliverySummary: DeliverySummary.fromMap(summaryData),
+            );
+            _syncShipmentSummary(latestShipment!);
+            notifyListeners();
+          }
+        } catch (e) {
+          debugPrint('Post-delivery completion failed: $e');
+        }
       }
     } catch (_) {
       errorMessage = 'Simulation update failed.';

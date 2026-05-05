@@ -24,6 +24,7 @@ import mapsService from './services/mapsService.js';
 import { processIdempotentRequest } from './utils/idempotency.js';
 import { cacheManager } from './utils/cache.js';
 import { calculateDistance } from './utils/location.js';
+import deliveryController from './controllers/deliveryController.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -264,7 +265,7 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
     let analysisResult = null;
     try {
       analysisResult = await shipmentController.performAnalysis(shipment_id, req.traceId);
-      
+
       // If the sync call returned a fallback (success: false), trigger async repair
       if (analysisResult && !analysisResult.success) {
         console.warn(`[PIPELINE] Sync analysis for ${shipment_id} returned fallback. Triggering async repair...`);
@@ -276,10 +277,10 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
       shipmentController.runAsyncAnalysis(shipment_id, req.traceId);
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       shipment_id,
-      analysis: analysisResult 
+      analysis: analysisResult
     });
 
   } catch (err) {
@@ -318,7 +319,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
     // --- 2. INDIVIDUAL SHIPMENT STOP GUARD ---
     const shipmentStopKey = `stop:${shipment_id}`;
     let isShipmentStopped = cacheManager.get(shipmentStopKey);
-    
+
     if (isShipmentStopped === null) {
       // Cold cache safety: Verify against Firestore
       const doc = await db().collection('shipments').doc(shipment_id).get();
@@ -330,10 +331,10 @@ app.post('/update-location', authMiddleware, async (req, res) => {
 
     if (isShipmentStopped) {
       // Gracefully handle late-arriving telemetry after a stop command to avoid UI errors
-      return res.status(200).json({ 
-        success: true, 
+      return res.status(200).json({
+        success: true,
         message: `Shipment ${shipment_id} is already STOPPED. Update ignored.`,
-        is_stopped: true 
+        is_stopped: true
       });
     }
 
@@ -344,15 +345,15 @@ app.post('/update-location', authMiddleware, async (req, res) => {
 
     // SRE Best Practice: Stream ALL raw telemetry to BigQuery (Low cost, high scalability)
     // We do this BEFORE the Firestore throttle to ensure we never lose data.
-    eventManager.logToBigQuery(shipment_id, 'TELEMETRY_RAW', { 
-      lat, lng, speed_kmh, traceId: req.traceId 
-    }).catch(() => {});
+    eventManager.logToBigQuery(shipment_id, 'TELEMETRY_RAW', {
+      lat, lng, speed_kmh, traceId: req.traceId
+    }).catch(() => { });
 
     let shouldUpdateFirestore = true;
     if (lastTelemetry) {
       const dist = calculateDistance(lat, lng, lastTelemetry.lat, lastTelemetry.lng);
       const timeElapsed = now - lastTelemetry.timestamp;
-      
+
       // PRODUCTION THROTTLE: Only update Firestore if > 2km moved OR > 5 mins elapsed OR AI trigger requested
       if (dist < 2000 && timeElapsed < 300000 && !trigger_ai) {
         shouldUpdateFirestore = false;
@@ -363,7 +364,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       if (shouldUpdateFirestore) {
         // SHARDING: Partition shipments across sub-collections if volume is extreme
         const shardId = shipment_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 10;
-        
+
         const shipmentRef = db().collection('shipments').doc(shipment_id);
         await shipmentRef.update({
           current_location: { lat, lng },
@@ -374,18 +375,18 @@ app.post('/update-location', authMiddleware, async (req, res) => {
           shard_id: shardId,
           updated_at: new Date()
         });
-        
+
         cacheManager.set(cacheKey, { lat, lng, timestamp: now }, 600000);
       }
 
       if (trigger_ai) {
-        await eventManager.publishEvent('shipment.location_updated', { 
-          shipment_id, lat, lng, traceId: req.traceId 
+        await eventManager.publishEvent('shipment.location_updated', {
+          shipment_id, lat, lng, traceId: req.traceId
         });
       }
 
-      return { 
-        success: true, 
+      return {
+        success: true,
         message: shouldUpdateFirestore ? 'State Persisted.' : 'Logged to Analytics (Buffered in Firestore).'
       };
     });
@@ -408,6 +409,9 @@ app.post('/simulate-scenario', authMiddleware, shipmentController.simulateShipme
 app.post('/api/shipments/simulate', authMiddleware, shipmentController.simulateShipment);
 app.post('/inject-simulation', authMiddleware, shipmentController.injectSimulation);
 app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, shipmentController.applyRoute);
+
+/* ---------------- DELIVERY COMPLETION ---------------- */
+app.post('/api/shipments/:shipment_id/complete', authMiddleware, deliveryController.completeDelivery);
 
 /* ---------------- SIMULATOR CONTROLS ---------------- */
 app.post('/api/simulator/start', simulatorController.startSimulator);

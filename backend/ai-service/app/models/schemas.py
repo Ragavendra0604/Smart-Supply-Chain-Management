@@ -106,3 +106,38 @@ class EngineAnalysis(BaseModel):
 class LogisticsEngineResponse(BaseModel):
     success: bool
     analysis: EngineAnalysis
+
+
+# --- DELIVERY COMPLETION SCHEMAS ---
+
+class DeliverySummaryRequest(BaseModel):
+    shipment_id: str
+    origin: Optional[str] = "Unknown"
+    destination: Optional[str] = "Unknown"
+    mode: Optional[str] = "ROAD"
+    cargo_type: Optional[str] = "General"
+    priority: Optional[str] = "Normal"
+    is_perishable: Optional[bool] = False
+    distance_km: Optional[float] = 0.0
+    actual_duration_min: Optional[float] = 0.0
+    planned_duration_min: Optional[float] = 0.0
+    total_cost: Optional[float] = 0.0
+    total_fuel: Optional[float] = 0.0
+    avg_speed_kmh: Optional[float] = 0.0
+    peak_risk_score: Optional[float] = 0.0
+    weather_encountered: Optional[str] = "Clear"
+    delays_mins: Optional[float] = 0.0
+    news_disruptions: Optional[int] = 0
+    model_name: Optional[str] = "gemini-2.5-flash"
+
+
+class DeliverySummaryResponse(BaseModel):
+    on_time: bool
+    delay_variance_mins: float
+    efficiency_rating: float   # 0.0–1.0
+    performance_grade: str     # A / B / C / D
+    summary: str               # Narrative paragraph
+    key_insights: List[str]    # Bullet insights
+    maintenance_flag: bool     # True if vehicle needs inspection
+    maintenance_reason: Optional[str] = None
+    next_shipment_recommendation: str

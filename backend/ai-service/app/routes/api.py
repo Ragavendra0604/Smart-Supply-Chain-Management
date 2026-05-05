@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request
 from app.services.logistics_service import InputData
-from app.controllers.ai_controller import handle_pubsub_event, handle_predict
+from app.controllers.ai_controller import handle_pubsub_event, handle_predict, handle_delivery_summary
 
 router = APIRouter()
 
@@ -11,6 +11,10 @@ async def pubsub_push(request: Request):
 @router.post("/predict")
 def predict(data: InputData):
     return handle_predict(data)
+
+@router.post("/delivery-summary")
+async def delivery_summary(request: Request):
+    return await handle_delivery_summary(request)
 
 @router.get("/health")
 def health():

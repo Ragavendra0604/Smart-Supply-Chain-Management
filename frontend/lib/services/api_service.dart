@@ -308,5 +308,23 @@ class ApiService {
       body: jsonEncode({'stopped': stopped}),
     );
   }
+
+  /// Finalizes a delivery and generates a post-delivery AI report.
+  /// Called when the shipment status reaches DELIVERED.
+  Future<Map<String, dynamic>> completeShipment(String shipmentId) async {
+    final uri = Uri.parse(
+        '${AppConfig.apiBaseUrl}/api/shipments/$shipmentId/complete');
+    final response = await _client.post(
+      uri,
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode >= 400) {
+      throw Exception('Failed to complete shipment (${response.statusCode})');
+    }
+
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    return Map<String, dynamic>.from(body['summary'] as Map);
+  }
 }
 
