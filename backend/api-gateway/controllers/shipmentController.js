@@ -73,9 +73,7 @@ const performAnalysis = async (shipment_id, traceId = null) => {
     estimated_time: bestRoute.travel_time_min || 0,
     estimated_cost: bestRoute.total_cost || 0,
     traffic_duration: bestRoute.travel_time_min ? `${Math.round(bestRoute.travel_time_min)} mins` : 'N/A',
-    risk_score: aiResponse.ai_insights?.delay_probability > 1 
-      ? (aiResponse.ai_insights.delay_probability / 100) 
-      : (aiResponse.ai_insights?.delay_probability || aiResponse.risk_score || 0),
+    risk_score: aiResponse.risk_score || 0,
     risk_level: aiResponse.risk_level || 'UNKNOWN',
     ai_insights: {
       delay_probability: aiResponse.ai_insights?.delay_probability || 0,
@@ -165,8 +163,15 @@ const simulateShipment = async (req, res) => {
       shipment_id,
       routeData,
       weatherData,
-      traffic_level: trafficLevel || 1.0,
-      speed_modifier: speedModifier || 1.0,
+      newsData: shipment.newsData || [],
+      origin: shipment.origin,
+      destination: shipment.destination,
+      cargo_type: shipment.cargo_type || 'General',
+      priority: shipment.priority || 'NORMAL',
+      fuel_level: shipment.fuel_level || 100,
+      vehicle_health: shipment.vehicle_health || 'GOOD',
+      traffic_level: trafficLevel ?? 0.0,
+      speed_modifier: speedModifier ?? 1.0,
       mode,
     });
 
@@ -243,8 +248,8 @@ const injectSimulation = async (req, res) => {
 
     const updateData = {
       "weatherData.condition": weatherCondition,
-      "weatherData.traffic_level": trafficLevel,
-      "simulation_speed_modifier": speedModifier,
+      "weatherData.traffic_level": trafficLevel ?? 0.0,
+      "simulation_speed_modifier": speedModifier ?? 1.0,
       "updated_at": new Date()
     };
 

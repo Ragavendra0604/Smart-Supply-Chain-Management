@@ -25,7 +25,7 @@ class OptimizationData(BaseModel):
 class ScoredRoute(BaseModel):
     summary: str
     distance_km: float
-    travel_time_min: int
+    travel_time_min: float  # Float: includes float delay prediction addend
     total_cost: float
     total_fuel: float
     risk_level: str

@@ -264,9 +264,15 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
     let analysisResult = null;
     try {
       analysisResult = await shipmentController.performAnalysis(shipment_id, req.traceId);
+      
+      // If the sync call returned a fallback (success: false), trigger async repair
+      if (analysisResult && !analysisResult.success) {
+        console.warn(`[PIPELINE] Sync analysis for ${shipment_id} returned fallback. Triggering async repair...`);
+        shipmentController.runAsyncAnalysis(shipment_id, req.traceId);
+      }
     } catch (analysisErr) {
       console.error(`⚠️ Synchronous analysis failed for ${shipment_id}: ${analysisErr.message}`);
-      // Fallback: trigger async analysis if sync fails
+      // Emergency fallback: trigger async analysis if sync throws
       shipmentController.runAsyncAnalysis(shipment_id, req.traceId);
     }
 
@@ -435,6 +441,11 @@ const startApp = async () => {
       throw firebaseError;
     }
 
+    /* Mounted here (before listen): POST /api/shipments/analyze
+       Must be registered before server starts to avoid missing routes on cold start.
+       Inline GET /api/shipments route above takes priority because it's defined first. */
+    app.use('/api/shipments', shipmentRoutes);
+
     app.listen(PORT, async () => {
       console.log(`🚀 API Gateway running on port ${PORT}`);
       await bootstrap();
@@ -446,6 +457,3 @@ const startApp = async () => {
 };
 
 startApp();
-
-/* Mounted LAST: POST /api/shipments/analyze - keeps inline GET routes unblocked */
-app.use('/api/shipments', shipmentRoutes);

@@ -102,7 +102,7 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     mode = shipment_data.get("vehicle_type", "ROAD")
     weather_data = shipment_data.get("weatherData", {})
     news_data = shipment_data.get("newsData", [])
-    traffic_level = weather_data.get("traffic_level") or 1.0
+    traffic_level = weather_data.get("traffic_level") or 0.0
     speed_modifier = shipment_data.get("simulation_speed_modifier") or 1.0
 
     processed_routes = score_and_rank_routes(
@@ -239,7 +239,7 @@ def handle_predict(data: InputData):
                 if (existing_ai.get("success") and 
                     cached_state.get("weather_condition") == curr_weather and
                     cached_state.get("mode") == (data.mode or "ROAD") and
-                    abs(cached_state.get("traffic_level", 1.0) - (data.traffic_level or 1.0)) < 0.05 and
+                    abs(cached_state.get("traffic_level", 0.0) - (data.traffic_level or 0.0)) < 0.05 and
                     abs(cached_state.get("speed_modifier", 1.0) - (data.speed_modifier or 1.0)) < 0.05):
                     logger.info(f"CACHED: Tactical parameters matched for {data.shipment_id}")
                     return {**existing_ai, "is_cached": True}
@@ -250,6 +250,7 @@ def handle_predict(data: InputData):
             
         weather = data.weatherData or {}
         mode = data.mode or "ROAD"
+        # Use 0.0 as default traffic_level (no extra simulated traffic) — consistent with process_ai_analysis
         scored_routes = score_and_rank_routes(
             raw_routes, 
             weather, 
@@ -257,7 +258,7 @@ def handle_predict(data: InputData):
             fuel_level=data.fuel_level if data.fuel_level is not None else 100.0,
             vehicle_health=data.vehicle_health or "Good",
             news_data=data.newsData,
-            traffic_level=data.traffic_level or 1.0,
+            traffic_level=data.traffic_level or 0.0,
             speed_modifier=data.speed_modifier or 1.0
         )
 
@@ -292,12 +293,6 @@ def handle_predict(data: InputData):
             data
         )
         
-        analysis = engine_data.get("analysis", {})
-        engine_insights = analysis.get("ai_insights", {})
-        engine_risk = analysis.get("risk", {})
-        engine_time = analysis.get("time", {})
-
-        # --- STRATEGIC ADVISORY ENGINE (Advisory Only) ---
         analysis = engine_data.get("analysis", {})
         engine_insights = analysis.get("ai_insights", {})
         
@@ -344,9 +339,10 @@ def handle_predict(data: InputData):
             "all_routes": scored_routes,
             "reasoning_timestamp": datetime.now(timezone.utc).isoformat(),
             "cached_state": {
-                "weather_condition": curr_weather,
+                # curr_weather may not be defined if no shipment_id was provided — derive it safely
+                "weather_condition": (data.weatherData or {}).get("condition", "clear").lower(),
                 "mode": data.mode or "ROAD",
-                "traffic_level": data.traffic_level or 1.0,
+                "traffic_level": data.traffic_level or 0.0,
                 "speed_modifier": data.speed_modifier or 1.0
             }
         }

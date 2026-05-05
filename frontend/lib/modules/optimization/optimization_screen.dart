@@ -993,20 +993,49 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
   }
 
   void _recalculate() {
-    double risk = 0.1;
-    if (_trafficLevel > 0.6) risk += 0.35;
-    if (_weather.toLowerCase().contains('rain')) risk += 0.2;
-    if (_weather.toLowerCase().contains('storm')) risk += 0.55;
-    if (_speedModifier > 1.2) risk += 0.3;
+    // Heuristic engine: mirrors the backend score_and_rank_routes logic
+    // at a simplified level so the UI gives a realistic pre-AI estimate.
+    double risk = 0.1; // baseline risk
 
-    int delayMins = (40 * _trafficLevel).toInt();
-    if (_weather.toLowerCase().contains('storm')) delayMins += 60;
-    if (_weather.toLowerCase().contains('rain')) delayMins += 25;
-    if (_speedModifier > 1.0) delayMins = (delayMins / _speedModifier).toInt();
+    // Traffic risk: maps 0.0–1.0 traffic level to up to 0.6 risk delta
+    if (_trafficLevel > 0.7) {
+      risk += 0.45;
+    } else if (_trafficLevel > 0.4) {
+      risk += 0.25;
+    } else if (_trafficLevel > 0.1) {
+      risk += 0.10;
+    }
+
+    // Weather risk: mirrors backend weather_penalty values
+    if (_weather.toLowerCase().contains('storm')) {
+      risk += 0.6;
+    } else if (_weather.toLowerCase().contains('rain') ||
+        _weather.toLowerCase().contains('fog')) {
+      risk += 0.25;
+    }
+
+    // Overspeed risk
+    if (_speedModifier > 1.3) risk += 0.3;
+
+    // Delay estimate: traffic_level * 120% of a reference 60-min route + weather
+    // Backend: sim_traffic_impact = (base_dur_sec/60) * (traffic_level*1.2)
+    // We use a representative 60-min base for this pre-AI estimate.
+    const double baseMinutes = 60.0;
+    double delayMins = baseMinutes * (_trafficLevel * 1.2);
+    if (_weather.toLowerCase().contains('storm')) delayMins += 20.0 + (baseMinutes * 0.4);
+    if (_weather.toLowerCase().contains('rain') || _weather.toLowerCase().contains('fog')) {
+      delayMins += 5.0 + (baseMinutes * 0.15);
+    }
+    // Speed modifier: reduced speed means more time
+    if (_speedModifier < 1.0 && _speedModifier > 0) {
+      delayMins += baseMinutes * (1.0 / _speedModifier - 1.0);
+    } else if (_speedModifier > 1.0) {
+      delayMins += baseMinutes * (1.0 / _speedModifier - 1.0); // negative, saves time
+    }
 
     setState(() {
       _simulatedRisk = risk.clamp(0.05, 0.98);
-      _simulatedDelay = "$delayMins mins";
+      _simulatedDelay = '${delayMins.round().abs()} mins';
       _useHeuristics = true;
     });
   }
@@ -1026,11 +1055,15 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
           result['success'] == true &&
           result['analysis'] != null) {
         final analysis = result['analysis'] as Map<String, dynamic>;
+        // The inject endpoint returns enriched_data which contains:
+        // risk_score (number), estimated_time (mins), risk_level (string)
+        final rawRisk = analysis['risk_score'];
+        final rawTime = analysis['estimated_time'];
         setState(() {
-          _simulatedRisk = (analysis['risk_score'] as num).toDouble();
-          _simulatedDelay = analysis['predicted_delay_mins']?.toString() != null
-              ? "${analysis['predicted_delay_mins']} mins"
-              : "0 mins";
+          _simulatedRisk = rawRisk is num ? rawRisk.toDouble() : _simulatedRisk;
+          _simulatedDelay = rawTime is num
+              ? '${rawTime.round()} mins'
+              : (analysis['delay_prediction']?.toString() ?? _simulatedDelay);
           _useHeuristics = false;
           _lastAnalyzed = DateTime.now();
         });

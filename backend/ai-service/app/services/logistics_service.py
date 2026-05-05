@@ -27,12 +27,12 @@ class InputData(BaseModel):
     delivery_deadline: Optional[str] = None
     fuel_level: Optional[float] = 100.0
     vehicle_health: Optional[str] = "Good"
-    traffic_level: Optional[float] = 1.0
+    traffic_level: Optional[float] = 0.0
     speed_modifier: Optional[float] = 1.0
     model_name: Optional[str] = "gemini-2.5-flash"
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD", 
-                             traffic_level: float = 1.0, speed_modifier: float = 1.0) -> float:
+                             traffic_level: float = 0.0, speed_modifier: float = 1.0) -> float:
     # ml_model = get_ml_model()
     # if ml_model is None:
     #     return 0.0
@@ -79,7 +79,7 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
 def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD", 
                          fuel_level: float = 100.0, vehicle_health: str = "Good", 
                          news_data: List[Dict[str, Any]] = None,
-                         traffic_level: float = 1.0, speed_modifier: float = 1.0) -> List[Dict[str, Any]]:
+                         traffic_level: float = 0.0, speed_modifier: float = 1.0) -> List[Dict[str, Any]]:
     COST_PER_KM = float(os.environ.get("COST_PER_KM", 0.88))
     FUEL_PER_KM = float(os.environ.get("FUEL_PER_KM", 0.32))
     processed_routes = []
@@ -105,11 +105,14 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
                 duration_min = int(dur_str) if dur_str.isdigit() else 0
         except (ValueError, IndexError): duration_min = 0
 
-        total_cost = round(dist_km * COST_PER_KM, 2)
-        total_fuel = round(dist_km * FUEL_PER_KM, 1)
-        
         # Base delay from 'Smart Heuristic' (Now handles traffic/speed/weather centrally)
         predicted_delay_mins = get_ml_delay_prediction(route, weather, mode, traffic_level, speed_modifier)
+            
+        # 4. HOLISTIC COST & FUEL ENGINE (Accounts for idling and traffic impact)
+        # Fuel consumption increases with idling/slow traffic: ~0.15L per min of delay
+        idling_fuel = predicted_delay_mins * 0.12 
+        total_fuel = round((dist_km * FUEL_PER_KM) + idling_fuel, 1)
+        total_cost = round((dist_km * COST_PER_KM) + (idling_fuel * 1.6), 2)
             
         # --- HOLISTIC RISK SCORING ENGINE ---
         # 1. Base Risk (Traffic/ML Delay)

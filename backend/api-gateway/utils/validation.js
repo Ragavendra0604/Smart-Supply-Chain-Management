@@ -94,6 +94,8 @@ export const sanitizeAiResponse = (raw = {}) => {
     optimization_data: raw.optimization_data || null,
     all_routes: Array.isArray(raw.all_routes) ? raw.all_routes : [],
     ai_insights: raw.ai_insights || { delay_probability: 0, bottlenecks: [], recommendation: '' },
+    strategic_advisory: raw.strategic_advisory || null,
+    cached_state: raw.cached_state || null,
     reasoning_timestamp: raw.reasoning_timestamp || new Date().toISOString()
   };
 };
