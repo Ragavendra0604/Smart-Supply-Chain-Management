@@ -102,6 +102,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     mode = shipment_data.get("vehicle_type", "ROAD")
     weather_data = shipment_data.get("weatherData", {})
     news_data = shipment_data.get("newsData", [])
+    traffic_level = weather_data.get("traffic_level") or 1.0
+    speed_modifier = shipment_data.get("simulation_speed_modifier") or 1.0
 
     processed_routes = score_and_rank_routes(
         route_data, 
@@ -110,8 +112,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         fuel_level=shipment_data.get("fuel_level", 100.0),
         vehicle_health=shipment_data.get("vehicle_health", "Good"),
         news_data=news_data,
-        traffic_level=weather_data.get("traffic_level") or 1.0,
-        speed_modifier=shipment_data.get("simulation_speed_modifier") or 1.0
+        traffic_level=traffic_level,
+        speed_modifier=speed_modifier
     )
     if not processed_routes: return
 
@@ -214,7 +216,12 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             "optimization_data": optimization_data,
             "all_routes": processed_routes,
             "last_analyzed": firestore.SERVER_TIMESTAMP,
-            "cached_state": result["cached_state"]
+            "cached_state": {
+                "weather_condition": (weather_data.get("condition") or "clear").lower(),
+                "mode": mode,
+                "traffic_level": traffic_level,
+                "speed_modifier": speed_modifier
+            }
         }
     })
 
@@ -228,9 +235,13 @@ def handle_predict(data: InputData):
                 cached_state = existing_ai.get("cached_state", {})
                 curr_weather = (data.weatherData or {}).get("condition", "clear").lower()
                 
+                # SRE Audit: Cache must account for tactical simulator parameters
                 if (existing_ai.get("success") and 
                     cached_state.get("weather_condition") == curr_weather and
-                    cached_state.get("mode") == (data.mode or "ROAD")):
+                    cached_state.get("mode") == (data.mode or "ROAD") and
+                    abs(cached_state.get("traffic_level", 1.0) - (data.traffic_level or 1.0)) < 0.05 and
+                    abs(cached_state.get("speed_modifier", 1.0) - (data.speed_modifier or 1.0)) < 0.05):
+                    logger.info(f"CACHED: Tactical parameters matched for {data.shipment_id}")
                     return {**existing_ai, "is_cached": True}
 
         raw_routes = data.routeData
@@ -331,7 +342,13 @@ def handle_predict(data: InputData):
             "strategic_advisory": strategic_advisory,
             "optimization_data": optimization_data,
             "all_routes": scored_routes,
-            "reasoning_timestamp": datetime.now(timezone.utc).isoformat()
+            "reasoning_timestamp": datetime.now(timezone.utc).isoformat(),
+            "cached_state": {
+                "weather_condition": curr_weather,
+                "mode": data.mode or "ROAD",
+                "traffic_level": data.traffic_level or 1.0,
+                "speed_modifier": data.speed_modifier or 1.0
+            }
         }
         
         # --- LOGGING: Concise View (Stripping path for readability) ---

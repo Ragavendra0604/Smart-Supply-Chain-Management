@@ -45,8 +45,8 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         google_delay_min = max(0.0, (traffic_dur_sec - base_dur_sec) / 60.0)
         
         # 2. Add/Subtract SIMULATED delay from What-If sliders
-        # traffic_level 1.0 = no change to baseline. > 1.0 = more traffic.
-        sim_traffic_impact = (base_dur_sec / 60.0) * max(0.0, traffic_level - 1.0)
+        # traffic_level 0.0-1.0 from UI. 1.0 = 100% additional delay based on duration.
+        sim_traffic_impact = (base_dur_sec / 60.0) * (traffic_level * 1.2) # Max 120% delay impact
         
         # speed_modifier 1.0 = normal. 0.5 = half speed (adds duration).
         sim_speed_impact = 0.0
