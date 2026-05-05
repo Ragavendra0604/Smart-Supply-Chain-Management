@@ -292,13 +292,36 @@ class _RiskBanner extends StatelessWidget {
               color: color.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Text(
-              level == 'LOW' ? '+0 mins' : '+$delay',
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w900,
-                fontSize: 12,
-              ),
+            child: Consumer<DashboardController>(
+              builder: (context, controller, _) {
+                final opt = shipment.ai.optimization;
+                String displayDelay = '+$delay';
+                
+                if (opt != null) {
+                  try {
+                    final double b = LocationUtils.parseDuration(opt.before.time);
+                    final double a = LocationUtils.parseDuration(opt.after.time);
+                    final int diffMin = ((b - a) / 60).round();
+                    if (diffMin == 0) {
+                      displayDelay = '±0 min';
+                    } else {
+                      final absDiff = diffMin.abs();
+                      displayDelay = '${diffMin > 0 ? '-' : '+'}$absDiff min${absDiff == 1 ? '' : 's'}';
+                    }
+                  } catch (_) {}
+                } else if (delay == '0 mins' || delay == '0') {
+                  displayDelay = '±0 min';
+                }
+
+                return Text(
+                  displayDelay,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                );
+              },
             ),
           ),
         ],
@@ -384,8 +407,9 @@ class _ComparisonSection extends StatelessWidget {
       final double diffSec = b - a;
       final int diffMin = (diffSec / 60).round();
 
-      if (diffMin == 0) return '±0 mins';
-      return '${diffMin > 0 ? '-' : '+'}${diffMin.abs()} mins';
+      if (diffMin == 0) return '±0 min';
+      final int absMin = diffMin.abs();
+      return '${diffMin > 0 ? '-' : '+'}$absMin min${absMin == 1 ? '' : 's'}';
     } catch (e) {
       return null;
     }
@@ -634,7 +658,7 @@ class _AllRoutesSection extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${r['distance_km'] ?? 0} km  •  ${r['travel_time_min'] ?? 0} min  •  \$${r['total_cost'] ?? 0}',
+                        '${r['distance_km'] ?? 0} km  •  ${r['travel_time_min'] ?? 0} min${(r['travel_time_min'] ?? 0) == 1 ? '' : 's'}  •  \$${r['total_cost'] ?? 0}',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 11,
