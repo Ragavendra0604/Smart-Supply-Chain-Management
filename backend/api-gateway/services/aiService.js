@@ -8,7 +8,7 @@ const auth = new GoogleAuth();
  * Uses google-auth-library for secure service-to-service communication.
  * Handles ID Token lifecycle and automatic retries for identity propagation.
  */
-const getPrediction = async (data) => {
+const getPrediction = async (data, traceId = null) => {
   try {
     const aiBaseUrl = process.env.AI_SERVICE_URL || '';
     if (!aiBaseUrl) throw new Error('AI_SERVICE_URL is not configured');
@@ -25,15 +25,18 @@ const getPrediction = async (data) => {
     const client = await auth.getIdTokenClient(audience);
 
     // 3. Execute Authenticated Request
-    // client.request() automatically injects Authorization: Bearer <ID_TOKEN>
-    // and handles token refreshing if needed.
+    const headers = {
+      'Content-Type': 'application/json'
+    };
+    if (traceId) {
+      headers['x-trace-id'] = traceId;
+    }
+
     const response = await client.request({
       url,
       method: 'POST',
       data,
-      headers: {
-        'Content-Type': 'application/json'
-      },
+      headers,
       timeout: 28000, // Slightly below Cloud Run default timeout
       // Built-in retry logic for transient auth issues
       retryConfig: {

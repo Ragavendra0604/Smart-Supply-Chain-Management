@@ -14,7 +14,7 @@ import { sanitizeAiResponse } from '../utils/validation.js';
  * Orchestrates multi-service data fetching and AI inference in parallel.
  * Target Latency: < 2s | Performance: Parallel Async | Cost: Caching + Cooldown.
  */
-const performAnalysis = async (shipment_id) => {
+const performAnalysis = async (shipment_id, traceId = null) => {
   // 1. DATA ACCESS & COOLDOWN LAYER
   const doc = await db().collection('shipments').doc(shipment_id).get();
   if (!doc.exists) throw new Error('Shipment not found');
@@ -57,7 +57,7 @@ const performAnalysis = async (shipment_id) => {
     vehicle_health: shipment.vehicle_health || 'GOOD'
   };
 
-  const rawAiResponse = await aiService.getPrediction(aiPayload);
+  const rawAiResponse = await aiService.getPrediction(aiPayload, traceId);
   const aiResponse = sanitizeAiResponse(rawAiResponse);
 
   // 4. DATA ENRICHMENT & MAPPING (Alignment with Senior Architect Requirements)
@@ -86,7 +86,7 @@ const performAnalysis = async (shipment_id) => {
 
   // 5. ATOMIC PERSISTENCE
   // Sync the AI's predicted traffic duration into the primary route for UI consistency
-  if (routes.length > 0) {
+  if (routes && routes.length > 0) {
     routes[0].traffic_duration = bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A';
     routes[0].duration = bestRoute.raw_duration_min ? `${bestRoute.raw_duration_min} mins` : routes[0].duration;
   }
@@ -121,9 +121,9 @@ const performAnalysis = async (shipment_id) => {
   return enriched_data;
 };
 
-const runAsyncAnalysis = async (shipment_id) => {
+const runAsyncAnalysis = async (shipment_id, traceId = null) => {
   try {
-    await performAnalysis(shipment_id);
+    await performAnalysis(shipment_id, traceId);
   } catch (err) {
     console.error('[PIPELINE ERROR] %s:', shipment_id, err.message);
   }
@@ -132,7 +132,7 @@ const runAsyncAnalysis = async (shipment_id) => {
 const analyzeShipment = async (req, res) => {
   try {
     const { shipment_id } = req.body;
-    const result = await performAnalysis(shipment_id);
+    const result = await performAnalysis(shipment_id, req.traceId);
     res.json({ success: true, analysis: result });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -251,7 +251,7 @@ const injectSimulation = async (req, res) => {
     await db().collection('shipments').doc(shipment_id).update(updateData);
 
     // AI TRIGGER: Force re-analysis to refresh reasoning and metrics based on injected state
-    const analysisResult = await performAnalysis(shipment_id).catch(err => {
+    const analysisResult = await performAnalysis(shipment_id, req.traceId).catch(err => {
       console.error('[INJECT-AI] Analysis trigger failed:', err.message);
       return null;
     });

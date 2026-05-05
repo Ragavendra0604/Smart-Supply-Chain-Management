@@ -80,8 +80,21 @@ class EventManager {
       console.log(`[BIGQUERY] Flushed ${rowsToInsert.length} rows to analytics.`);
     } catch (err) {
       console.error(`[BIGQUERY ERROR] Batch insert failed:`, JSON.stringify(err.errors || err));
-      // Re-insert into buffer if it failed (Simple retry logic)
-      bqBuffer = [...rowsToInsert, ...bqBuffer];
+      
+      // PRODUCTION SRE: Filter out "poison pill" rows that failed repeatedly
+      const retryableRows = rowsToInsert
+        .map(row => ({ ...row, retry_count: (row.retry_count || 0) + 1 }))
+        .filter(row => {
+          if (row.retry_count > 3) {
+            console.error(`[BIGQUERY FATAL] Discarding poison pill row after 3 retries: ${row.shipment_id} - ${row.event_type}`);
+            return false;
+          }
+          return true;
+        });
+
+      if (retryableRows.length > 0) {
+        bqBuffer = [...retryableRows, ...bqBuffer];
+      }
     } finally {
       flushInProgress = false;
     }

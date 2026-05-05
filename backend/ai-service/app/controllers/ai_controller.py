@@ -52,13 +52,22 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         
     shipment_data = shipment_snapshot.to_dict()
     
-    # Global Stop Check
-    try:
-        sys_doc = db.collection("system").document("config").get()
-        if sys_doc.exists and sys_doc.to_dict().get("isGlobalStopped"):
-            logger.info("Skipping analysis: Global Stop is active.")
-            return
-    except Exception: pass
+    # Global Stop Check (with simple in-memory cache to reduce costs)
+    global_stop_cache = getattr(process_ai_analysis, "_global_stop_cache", {"value": False, "expiry": 0})
+    now = datetime.now().timestamp()
+    
+    if now > global_stop_cache["expiry"]:
+        try:
+            sys_doc = db.collection("system").document("config").get()
+            is_stopped = sys_doc.exists and sys_doc.to_dict().get("isGlobalStopped")
+            global_stop_cache = {"value": is_stopped, "expiry": now + 60}
+            process_ai_analysis._global_stop_cache = global_stop_cache
+        except Exception: 
+            pass
+
+    if global_stop_cache["value"]:
+        logger.info("Skipping analysis: Global Stop is active.")
+        return
 
     if shipment_data.get("status") in ["STOPPED", "COMPLETED", "CANCELLED"]:
         return
@@ -67,17 +76,26 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     existing_ai = shipment_data.get("aiResponse", {})
     last_analyzed = existing_ai.get("last_analyzed")
     
-    # Cooldown Logic (Skip if analyzed recently, unless it's high risk)
+    # --- DATA INTEGRITY: Out-of-order & Cooldown Logic ---
     if last_analyzed and msg_timestamp:
         try:
             msg_dt = datetime.fromisoformat(msg_timestamp.replace("Z", "+00:00"))
-            if hasattr(last_analyzed, 'timestamp'):
-                diff_seconds = msg_dt.timestamp() - last_analyzed.timestamp()
-                # Skip if message is old (diff < 0) or too frequent (diff < 120s)
-                if diff_seconds < 120 and existing_ai.get("risk_level") != "HIGH":
-                    logger.info(f"Skipping analysis for {shipment_id} (Cooldown or Out-of-order: {diff_seconds:.1f}s)")
+            last_dt = datetime.fromtimestamp(last_analyzed.timestamp(), tz=timezone.utc) if hasattr(last_analyzed, 'timestamp') else None
+            
+            if last_dt:
+                diff_seconds = msg_dt.timestamp() - last_dt.timestamp()
+                
+                # 1. STALENESS GUARD: If message is older than last analysis, skip it.
+                if diff_seconds < 0:
+                    logger.info(f"Skipping analysis for {shipment_id}: Out-of-order event (Stale by {-diff_seconds:.1f}s)")
                     return
-        except (ValueError, AttributeError): pass
+                
+                # 2. COOLDOWN GUARD: Skip if analyzed very recently (60s), unless HIGH risk
+                if diff_seconds < 60 and existing_ai.get("risk_level") != "HIGH":
+                    logger.info(f"Skipping analysis for {shipment_id}: Cooldown active ({diff_seconds:.1f}s since last)")
+                    return
+        except Exception as integrity_err:
+            logger.warning(f"Integrity check failed for {shipment_id}: {integrity_err}")
 
     route_data = shipment_data.get("routeData", [])
     if not isinstance(route_data, list): route_data = [route_data]
@@ -102,7 +120,9 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     
     # Semantic Caching DISABLED for MVP dynamic testing
     should_call_gemini = True
-    insight = existing_ai.get("insight")
+    insight = existing_ai.get("insight", "")
+    suggestion = ""
+    strategic_advisory = None
     
     if should_call_gemini:
         input_data = InputData(
@@ -123,16 +143,31 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         )
         # Optimization: Use summarized routes to save AI tokens
         input_data.routeData = processed_routes
-        insight = generate_logistics_insight(
+        engine_data = generate_logistics_insight(
             best['risk_score'], 
             f"{best['predicted_delay_mins']} mins", 
             input_data
         )
+
+        # --- STRATEGIC ADVISORY ENGINE (Advisory Only) ---
+        analysis = engine_data.get("analysis", {})
+        engine_insights = analysis.get("ai_insights", {})
+
+        insight = engine_insights.get("recommendation", "Strategic evaluation complete.")
+        suggestion = f"Strategic Decision: {engine_insights.get('decision', 'GO')}"
+        
+        # Strategic metadata for advanced UI layers (Optional visibility)
+        strategic_advisory = {
+            "risk_score": float(analysis.get("risk", {}).get("score", 0)),
+            "delay_mins": float(analysis.get("time", {}).get("delay_minutes", 0)),
+            "decision": engine_insights.get("decision", "GO"),
+            "confidence": engine_insights.get("confidence", 0.9)
+        }
     
-    # Compare current route (processed_routes[0]) vs best route
+    # --- DETERMINISTIC METRICS (Heuristic Source of Truth) ---
     optimization_data = {
         "before": {
-            "time": f"{int(current['travel_time_min'] // 60)}h {int(current['travel_time_min'] % 60)}m",
+            "time": f"{int(current['raw_duration_min'] // 60)}h {int(current['raw_duration_min'] % 60)}m",
             "cost": float(current['total_cost']),
             "fuel": float(current['total_fuel'])
         },
@@ -145,11 +180,12 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
 
     result = {
         "success": True,
-        "risk_score": best['risk_score'],
-        "risk_level": best['risk_level'],
-        "delay_prediction": f"{int(best['predicted_delay_mins'])} mins",
-        "suggestion": f"Switch to {best['summary']} for optimal safety." if best is not current else "Maintain current optimal route.",
+        "risk_score": best['risk_score'], # HEURISTIC TRUTH
+        "risk_level": best['risk_level'],   # HEURISTIC TRUTH
+        "delay_prediction": f"{int(best['predicted_delay_mins'])} mins", # HEURISTIC TRUTH
+        "suggestion": suggestion if should_call_gemini else (f"Switch to {best['summary']} for optimal safety." if best is not current else "Maintain current optimal route."),
         "insight": insight,
+        "strategic_advisory": strategic_advisory if should_call_gemini else None,
         "optimization_data": optimization_data,
         "all_routes": processed_routes,
         "last_analyzed": "SERVER_TIMESTAMP",
@@ -167,15 +203,13 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             "risk_score": best['risk_score'],
             "risk_level": best['risk_level'],
             "delay_prediction": f"{int(best['predicted_delay_mins'])} mins",
-            "suggestion": f"Switch to {best['summary']} for optimal safety." if best is not current else "Maintain current optimal route.",
-            "insight": insight,
+            "suggestion": result["suggestion"],
+            "insight": result["insight"],
+            "strategic_advisory": result.get("strategic_advisory"),
             "optimization_data": optimization_data,
             "all_routes": processed_routes,
             "last_analyzed": firestore.SERVER_TIMESTAMP,
-            "cached_state": {
-                "weather_condition": (weather_data.get("condition") or "clear").lower(),
-                "mode": mode
-            }
+            "cached_state": result["cached_state"]
         }
     })
 
@@ -245,11 +279,25 @@ def handle_predict(data: InputData):
         analysis = engine_data.get("analysis", {})
         engine_insights = analysis.get("ai_insights", {})
         engine_risk = analysis.get("risk", {})
+        engine_time = analysis.get("time", {})
 
-        # Compare current route (scored_routes[0]) vs best route
+        # --- STRATEGIC ADVISORY ENGINE (Advisory Only) ---
+        analysis = engine_data.get("analysis", {})
+        engine_insights = analysis.get("ai_insights", {})
+        
+        # Strategic metadata for advanced UI layers
+        strategic_advisory = {
+            "risk_score": float(analysis.get("risk", {}).get("score", 0)),
+            "delay_mins": float(analysis.get("time", {}).get("delay_minutes", 0)),
+            "decision": engine_insights.get("decision", "GO"),
+            "confidence": engine_insights.get("confidence", 0.9)
+        }
+
+        # --- DETERMINISTIC METRICS (Heuristic Source of Truth) ---
+        # Optimization uses Heuristic scores for strict predictability
         optimization_data = {
             "before": {
-                "time": f"{int(scored_routes[0]['travel_time_min'] // 60)}h {int(scored_routes[0]['travel_time_min'] % 60)}m",
+                "time": f"{int(scored_routes[0]['raw_duration_min'] // 60)}h {int(scored_routes[0]['raw_duration_min'] % 60)}m",
                 "cost": float(scored_routes[0]['total_cost']),
                 "fuel": float(scored_routes[0]['total_fuel'])
             },
@@ -269,16 +317,15 @@ def handle_predict(data: InputData):
 
         final_response = {
             "success": True,
-            "risk_score": float(engine_risk.get("score", best["risk_score"])),
-            "risk_level": str(engine_risk.get("level", best["risk_level"])),
-            "delay_prediction": f"{int(analysis.get('time', {}).get('delay_minutes', best['predicted_delay_mins']))} mins",
+            "risk_score": float(best["risk_score"]), # HEURISTIC TRUTH
+            "risk_level": str(best["risk_level"]),   # HEURISTIC TRUTH
+            "delay_prediction": f"{int(best['predicted_delay_mins'])} mins", # HEURISTIC TRUTH
             "suggestion": f"Strategic Decision: {engine_insights.get('decision', 'GO')}",
             "insight": engine_insights.get("recommendation", "Awaiting strategic insight..."),
             "ai_insights": ai_insights,
+            "strategic_advisory": strategic_advisory,
             "optimization_data": optimization_data,
             "all_routes": scored_routes,
-            "strategic_engine": analysis,
-            "model_used": "gemini-2.5-flash",
             "reasoning_timestamp": datetime.now(timezone.utc).isoformat()
         }
         

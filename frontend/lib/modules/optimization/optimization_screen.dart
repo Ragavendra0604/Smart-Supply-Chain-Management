@@ -57,7 +57,7 @@ class OptimizationScreen extends StatelessWidget {
           _RiskBanner(shipment: currentShipment),
           const SizedBox(height: 24),
           if (opt != null) ...[
-            _ComparisonSection(opt: opt),
+            _ComparisonSection(opt: opt, shipment: currentShipment),
             const SizedBox(height: 24),
           ],
           if (allRoutes.isNotEmpty) ...[
@@ -99,7 +99,7 @@ class OptimizationScreen extends StatelessWidget {
                   _RiskBanner(shipment: currentShipment),
                   const SizedBox(height: 24),
                   if (opt != null) ...[
-                    _ComparisonSection(opt: opt),
+                    _ComparisonSection(opt: opt, shipment: currentShipment),
                     const SizedBox(height: 24),
                   ],
                   _AiReasoning(
@@ -309,7 +309,8 @@ class _RiskBanner extends StatelessWidget {
 
 class _ComparisonSection extends StatelessWidget {
   final ShipmentOptimizationData opt;
-  const _ComparisonSection({required this.opt});
+  final Shipment shipment;
+  const _ComparisonSection({required this.opt, required this.shipment});
 
   @override
   Widget build(BuildContext context) {
@@ -360,6 +361,15 @@ class _ComparisonSection extends StatelessWidget {
               ? '${fuelSaved > 0 ? '-' : '+'}${fuelSaved.abs().toStringAsFixed(1)} L'
               : null,
           isSaving: fuelSaved > 0,
+        ),
+        const SizedBox(height: 12),
+        _MetricRow(
+          label: 'Risk Exposure',
+          before: 'STANDARD',
+          after: shipment.ai.riskLevel,
+          icon: Icons.security_outlined,
+          savingLabel: shipment.ai.riskLevel == 'LOW' ? 'SAFE' : 'MONITOR',
+          isSaving: shipment.ai.riskLevel == 'LOW',
         ),
       ],
     );

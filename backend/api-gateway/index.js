@@ -263,11 +263,11 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
     // 2. INTELLIGENT INITIALIZATION PIPELINE (Synchronous for UX, parallel for speed)
     let analysisResult = null;
     try {
-      analysisResult = await shipmentController.performAnalysis(shipment_id);
+      analysisResult = await shipmentController.performAnalysis(shipment_id, req.traceId);
     } catch (analysisErr) {
       console.error(`⚠️ Synchronous analysis failed for ${shipment_id}: ${analysisErr.message}`);
       // Fallback: trigger async analysis if sync fails
-      shipmentController.runAsyncAnalysis(shipment_id);
+      shipmentController.runAsyncAnalysis(shipment_id, req.traceId);
     }
 
     res.json({ 
