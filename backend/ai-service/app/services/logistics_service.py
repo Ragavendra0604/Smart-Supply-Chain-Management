@@ -276,12 +276,16 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             """
             
         try:
-            model_name = data.model_name or "gemini-2.5-flash"
+            model_name = data.model_name or "gemini-1.5-flash"
             
+            # --- STRUCTURED OUTPUT ENFORCEMENT ---
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
-                config={ 'response_mime_type': 'application/json' }
+                config={ 
+                    'response_mime_type': 'application/json',
+                    'response_schema': LogisticsEngineResponse
+                }
             )
             
             if not response or not response.text:

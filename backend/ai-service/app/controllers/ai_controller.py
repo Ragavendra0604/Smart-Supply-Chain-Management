@@ -195,7 +195,12 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         }
     }
     
-    logger.info(f"--- BACKGROUND AI ANALYSIS [{shipment_id}] ---\n{json.dumps(result, indent=2, default=str)}")
+    # --- LOGGING: Concise View (Stripping path for readability) ---
+    log_result = result.copy()
+    if "all_routes" in log_result:
+        log_result["all_routes"] = [{k: v for k, v in r.items() if k != 'path'} for r in log_result["all_routes"]]
+    
+    logger.info(f"--- BACKGROUND AI ANALYSIS [{shipment_id}] ---\n{json.dumps(log_result, indent=2, default=str)}")
 
     doc_ref.update({
         "aiResponse": {
@@ -329,7 +334,12 @@ def handle_predict(data: InputData):
             "reasoning_timestamp": datetime.now(timezone.utc).isoformat()
         }
         
-        logger.info(f"--- SENIOR LOGISTICS ENGINE RESPONSE [{data.shipment_id or 'RAW'}] ---\n{json.dumps(final_response, indent=2, default=str)}")
+        # --- LOGGING: Concise View (Stripping path for readability) ---
+        log_response = final_response.copy()
+        if "all_routes" in log_response:
+            log_response["all_routes"] = [{k: v for k, v in r.items() if k != 'path'} for r in log_response["all_routes"]]
+        
+        logger.info(f"--- SENIOR LOGISTICS ENGINE RESPONSE [{data.shipment_id or 'RAW'}] ---\n{json.dumps(log_response, indent=2, default=str)}")
         return final_response
     except Exception as e:
         logger.error(f"Prediction Error: {str(e)}")

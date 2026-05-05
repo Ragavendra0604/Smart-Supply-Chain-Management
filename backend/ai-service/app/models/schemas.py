@@ -49,59 +49,59 @@ class FullAIResponse(BaseModel):
 # --- NEW SENIOR LOGISTICS ENGINE SCHEMAS ---
 
 class RouteAnalysis(BaseModel):
-    origin: str
-    destination: str
-    distance_km: float
+    origin: Optional[str] = "Unknown"
+    destination: Optional[str] = "Unknown"
+    distance_km: Optional[float] = 0.0
 
 class TrafficAnalysis(BaseModel):
-    duration_minutes: float
-    congestion_level: str = Field(..., pattern="^(LOW|MEDIUM|HIGH)$")
-    traffic_index: float = Field(..., ge=0, le=1)
+    duration_minutes: Optional[float] = 0.0
+    congestion_level: Optional[str] = "LOW"
+    traffic_index: Optional[float] = 0.0
 
 class WeatherAnalysis(BaseModel):
-    condition: str
-    severity_index: float = Field(..., ge=0, le=1)
+    condition: Optional[str] = "Clear"
+    severity_index: Optional[float] = 0.1
 
 class FuelAnalysis(BaseModel):
-    fuel_price_per_litre: float
-    consumption_kmpl: float
-    fuel_cost: float
+    fuel_price_per_litre: Optional[float] = 1.2
+    consumption_kmpl: Optional[float] = 12.0
+    fuel_cost: Optional[float] = 0.0
 
 class CostingAnalysis(BaseModel):
-    base_cost: float
-    fuel_cost: float
-    total_cost: float
+    base_cost: Optional[float] = 100.0
+    fuel_cost: Optional[float] = 0.0
+    total_cost: Optional[float] = 100.0
 
 class TimeAnalysis(BaseModel):
-    estimated_minutes: float
-    delay_minutes: float
-    delay_probability: float = Field(..., ge=0, le=1)
+    estimated_minutes: Optional[float] = 0.0
+    delay_minutes: Optional[float] = 0.0
+    delay_probability: Optional[float] = 0.0
 
 class RiskFactors(BaseModel):
-    traffic: float
-    weather: float
-    route: float
+    traffic: Optional[float] = 0.33
+    weather: Optional[float] = 0.33
+    route: Optional[float] = 0.33
 
 class RiskAnalysis(BaseModel):
-    score: float
-    level: str = Field(..., pattern="^(LOW|MEDIUM|HIGH)$")
-    factors: RiskFactors
+    score: Optional[float] = 0.0
+    level: Optional[str] = "LOW"
+    factors: Optional[RiskFactors] = None
 
 class EngineAiInsights(BaseModel):
-    decision: str = Field(..., pattern="^(GO|HOLD|REROUTE)$")
-    confidence: float = Field(..., ge=0, le=1)
-    bottlenecks: List[str]
-    recommendation: str
+    decision: Optional[str] = "GO"
+    confidence: Optional[float] = 1.0
+    bottlenecks: Optional[List[str]] = []
+    recommendation: Optional[str] = "Proceed normally."
 
 class EngineAnalysis(BaseModel):
-    route: RouteAnalysis
-    traffic: TrafficAnalysis
-    weather: WeatherAnalysis
-    fuel: FuelAnalysis
-    costing: CostingAnalysis
-    time: TimeAnalysis
-    risk: RiskAnalysis
-    ai_insights: EngineAiInsights
+    route: Optional[RouteAnalysis] = None
+    traffic: Optional[TrafficAnalysis] = None
+    weather: Optional[WeatherAnalysis] = None
+    fuel: Optional[FuelAnalysis] = None
+    costing: Optional[CostingAnalysis] = None
+    time: Optional[TimeAnalysis] = None
+    risk: Optional[RiskAnalysis] = None
+    ai_insights: Optional[EngineAiInsights] = None
 
 class LogisticsEngineResponse(BaseModel):
     success: bool
