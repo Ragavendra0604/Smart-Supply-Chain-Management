@@ -440,11 +440,11 @@ OUTPUT SCHEMA (JSON ONLY, NO EXTRA TEXT):
                 "delay_variance_mins": delay_variance,
                 "efficiency_rating": efficiency_rating,
                 "performance_grade": grade,
-                "summary": ai_data.get("summary", fallback_summary),
-                "key_insights": ai_data.get("key_insights", fallback_insights),
+                "summary": ai_data.get("summary") or fallback_summary,
+                "key_insights": ai_data.get("key_insights") or fallback_insights,
                 "maintenance_flag": maintenance_flag,
                 "maintenance_reason": ai_data.get("maintenance_reason"),
-                "next_shipment_recommendation": ai_data.get("next_shipment_recommendation", fallback_recommendation),
+                "next_shipment_recommendation": ai_data.get("next_shipment_recommendation") or fallback_recommendation,
                 "ai_generated": True,
             }
 

@@ -399,8 +399,11 @@ async def handle_delivery_summary(request: Request):
                     "delay_variance_mins": summary["delay_variance_mins"],
                     "efficiency_rating": summary["efficiency_rating"],
                     "performance_grade": summary["performance_grade"],
+                    "summary": summary["summary"],
+                    "key_insights": summary["key_insights"],
                     "maintenance_flag": summary["maintenance_flag"],
                     "maintenance_reason": summary.get("maintenance_reason"),
+                    "next_shipment_recommendation": summary.get("next_shipment_recommendation"),
                     "ai_generated": summary.get("ai_generated", False),
                     "generated_at": delivered_at,
                 }
