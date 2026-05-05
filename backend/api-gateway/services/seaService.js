@@ -18,8 +18,8 @@ const getVesselStatus = async (mmsi) => {
       };
     }
 
-    const response = await axios.get(`https://api.marinetraffic.com/v1/vesselmasterdata/${process.env.MARINE_API_KEY}/mmsi:${mmsi}`);
-    
+    const response = await axios.get(`https://services.marinetraffic.com/api/exportvesseltrack/${process.env.MARINE_API_KEY}/mmsi:${mmsi}`);
+
     return {
       mode: 'SEA',
       id: mmsi,
@@ -35,20 +35,25 @@ const getVesselStatus = async (mmsi) => {
  * MOCK: Strategic Maritime Route Logic
  * Provides multi-modal sea paths for demo purposes.
  */
-const getRoute = async (origin, destination) => {
-  console.log(`[SEA_SERVICE] Mocking maritime path: ${origin} -> ${destination}`);
-  
+const getRoute = async (origin, destination, groundTruth = null) => {
+  console.log(`[SEA_SERVICE] Generating dynamic maritime path: ${origin} -> ${destination}`);
+
+  const start = groundTruth?.origin || { lat: 1.3521, lng: 103.8198 };
+  const end = groundTruth?.destination || { lat: 33.7739, lng: -118.2437 };
+  const dist_m = groundTruth?.distance_meters || 12800000;
+
   return [{
-    summary: "Standard Maritime Shipping Lane",
-    distance: "12,800 km",
-    duration: "14 days",
-    distance_meters: 12800000,
-    duration_seconds: 1209600,
-    total_cost: 3500.00,
-    total_fuel: 18000.0,
+    summary: `Maritime Route: ${origin} to ${destination}`,
+    distance: `${(dist_m / 1000).toFixed(0)} km`,
+    duration: `${Math.round(dist_m / 1000 / 30 / 24)} days`,
+    distance_meters: dist_m,
+    duration_seconds: Math.round(dist_m / 1000 / 30 * 3600),
+    total_cost: (dist_m / 1000) * 0.15,
+    total_fuel: (dist_m / 1000) * 1.5,
     path: [
-      { lat: 1.3521, lng: 103.8198 }, // Singapore
-      { lat: 33.7739, lng: -118.2437 } // Long Beach
+      start,
+      { lat: (start.lat + end.lat) / 2 - 5.0, lng: (start.lng + end.lng) / 2 }, // Deep sea curve
+      end
     ]
   }];
 };

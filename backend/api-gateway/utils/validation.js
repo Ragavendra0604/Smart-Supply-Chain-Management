@@ -93,6 +93,7 @@ export const sanitizeAiResponse = (raw = {}) => {
     insight: isNonEmptyString(raw.insight) ? raw.insight : '',
     optimization_data: raw.optimization_data || null,
     all_routes: Array.isArray(raw.all_routes) ? raw.all_routes : [],
-    ai_insights: raw.ai_insights || { delay_probability: 0, bottlenecks: [], recommendation: '' }
+    ai_insights: raw.ai_insights || { delay_probability: 0, bottlenecks: [], recommendation: '' },
+    reasoning_timestamp: raw.reasoning_timestamp || new Date().toISOString()
   };
 };

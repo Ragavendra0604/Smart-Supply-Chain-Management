@@ -41,20 +41,29 @@ const getFlightStatus = async (flightNumber) => {
  * MOCK: Strategic Air Route Logic
  * Provides multi-modal flight paths for demo purposes.
  */
-const getRoute = async (origin, destination) => {
-  console.log(`[AIR_SERVICE] Mocking flight path: ${origin} -> ${destination}`);
+const getRoute = async (origin, destination, groundTruth = null) => {
+  console.log(`[AIR_SERVICE] Generating dynamic flight path: ${origin} -> ${destination}`);
   
+  const start = groundTruth?.origin || { lat: 37.7749, lng: -122.4194 };
+  const end = groundTruth?.destination || { lat: 40.7128, lng: -74.0060 };
+  const dist_m = groundTruth?.distance_meters || 5420000;
+  
+  // High-altitude flight path (linear interpolation for demo)
+  const midLat = (start.lat + end.lat) / 2 + 2.0; // Curve slightly for "realism"
+  const midLng = (start.lng + end.lng) / 2;
+
   return [{
-    summary: "Transcontinental Flight Corridor",
-    distance: "5,420 km",
-    duration: "6h 45m",
-    distance_meters: 5420000,
-    duration_seconds: 24300,
-    total_cost: 1250.00,
-    total_fuel: 4200.0,
+    summary: `Flight via ${origin} Air Corridor`,
+    distance: `${(dist_m / 1000).toFixed(0)} km`,
+    duration: `${Math.floor(dist_m / 1000 / 800)}h ${Math.round((dist_m / 1000 / 800 % 1) * 60)}m`,
+    distance_meters: dist_m,
+    duration_seconds: Math.round(dist_m / 1000 / 800 * 3600),
+    total_cost: (dist_m / 1000) * 0.25, // Air cost per km
+    total_fuel: (dist_m / 1000) * 0.8,
     path: [
-      { lat: 37.7749, lng: -122.4194 }, // Start
-      { lat: 40.7128, lng: -74.0060 }  // End
+      start,
+      { lat: midLat, lng: midLng },
+      end
     ]
   }];
 };

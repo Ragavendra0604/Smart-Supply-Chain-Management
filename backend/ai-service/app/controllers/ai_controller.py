@@ -1,7 +1,7 @@
 import base64
 import json
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -67,14 +67,15 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
     existing_ai = shipment_data.get("aiResponse", {})
     last_analyzed = existing_ai.get("last_analyzed")
     
-    # Cooldown Logic
+    # Cooldown Logic (Skip if analyzed recently, unless it's high risk)
     if last_analyzed and msg_timestamp:
         try:
             msg_dt = datetime.fromisoformat(msg_timestamp.replace("Z", "+00:00"))
             if hasattr(last_analyzed, 'timestamp'):
                 diff_seconds = msg_dt.timestamp() - last_analyzed.timestamp()
+                # Skip if message is old (diff < 0) or too frequent (diff < 120s)
                 if diff_seconds < 120 and existing_ai.get("risk_level") != "HIGH":
-                    logger.info(f"Skipping analysis for {shipment_id} (Cooldown active)")
+                    logger.info(f"Skipping analysis for {shipment_id} (Cooldown or Out-of-order: {diff_seconds:.1f}s)")
                     return
         except (ValueError, AttributeError): pass
 
@@ -128,16 +129,17 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             input_data
         )
     
+    # Compare current route (processed_routes[0]) vs best route
     optimization_data = {
         "before": {
-            "time": f"{best['raw_duration_min'] // 60}h {best['raw_duration_min'] % 60}m",
-            "cost": best['total_cost'] * 0.95,
-            "fuel": best['total_fuel'] * 0.98
+            "time": f"{int(current['travel_time_min'] // 60)}h {int(current['travel_time_min'] % 60)}m",
+            "cost": float(current['total_cost']),
+            "fuel": float(current['total_fuel'])
         },
         "after": {
-            "time": f"{best['travel_time_min'] // 60}h {best['travel_time_min'] % 60}m",
-            "cost": best['total_cost'],
-            "fuel": best['total_fuel']
+            "time": f"{int(best['travel_time_min'] // 60)}h {int(best['travel_time_min'] % 60)}m",
+            "cost": float(best['total_cost']),
+            "fuel": float(best['total_fuel'])
         }
     }
 
@@ -145,7 +147,7 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         "success": True,
         "risk_score": best['risk_score'],
         "risk_level": best['risk_level'],
-        "delay_prediction": f"{best['predicted_delay_mins']} mins",
+        "delay_prediction": f"{int(best['predicted_delay_mins'])} mins",
         "suggestion": f"Switch to {best['summary']} for optimal safety." if best is not current else "Maintain current optimal route.",
         "insight": insight,
         "optimization_data": optimization_data,
@@ -164,7 +166,7 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             "success": True,
             "risk_score": best['risk_score'],
             "risk_level": best['risk_level'],
-            "delay_prediction": f"{best['predicted_delay_mins']} mins",
+            "delay_prediction": f"{int(best['predicted_delay_mins'])} mins",
             "suggestion": f"Switch to {best['summary']} for optimal safety." if best is not current else "Maintain current optimal route.",
             "insight": insight,
             "optimization_data": optimization_data,
@@ -244,16 +246,17 @@ def handle_predict(data: InputData):
         engine_insights = analysis.get("ai_insights", {})
         engine_risk = analysis.get("risk", {})
 
+        # Compare current route (scored_routes[0]) vs best route
         optimization_data = {
             "before": {
-                "time": f"{best['raw_duration_min'] // 60}h {best['raw_duration_min'] % 60}m",
-                "cost": best['total_cost'] * 0.95,
-                "fuel": best['total_fuel'] * 0.98
+                "time": f"{int(scored_routes[0]['travel_time_min'] // 60)}h {int(scored_routes[0]['travel_time_min'] % 60)}m",
+                "cost": float(scored_routes[0]['total_cost']),
+                "fuel": float(scored_routes[0]['total_fuel'])
             },
             "after": {
-                "time": f"{best['travel_time_min'] // 60}h {best['travel_time_min'] % 60}m",
-                "cost": best['total_cost'],
-                "fuel": best['total_fuel']
+                "time": f"{int(best['travel_time_min'] // 60)}h {int(best['travel_time_min'] % 60)}m",
+                "cost": float(best['total_cost']),
+                "fuel": float(best['total_fuel'])
             }
         }
 
@@ -266,15 +269,17 @@ def handle_predict(data: InputData):
 
         final_response = {
             "success": True,
-            "risk_score": engine_risk.get("score", best["risk_score"]),
-            "risk_level": engine_risk.get("level", best["risk_level"]),
-            "delay_prediction": f"{analysis.get('time', {}).get('estimated_minutes', best['predicted_delay_mins'])} mins",
+            "risk_score": float(engine_risk.get("score", best["risk_score"])),
+            "risk_level": str(engine_risk.get("level", best["risk_level"])),
+            "delay_prediction": f"{int(analysis.get('time', {}).get('delay_minutes', best['predicted_delay_mins']))} mins",
             "suggestion": f"Strategic Decision: {engine_insights.get('decision', 'GO')}",
             "insight": engine_insights.get("recommendation", "Awaiting strategic insight..."),
             "ai_insights": ai_insights,
             "optimization_data": optimization_data,
             "all_routes": scored_routes,
-            "strategic_engine": analysis # High-fidelity deterministic data
+            "strategic_engine": analysis,
+            "model_used": "gemini-2.5-flash",
+            "reasoning_timestamp": datetime.now(timezone.utc).isoformat()
         }
         
         logger.info(f"--- SENIOR LOGISTICS ENGINE RESPONSE [{data.shipment_id or 'RAW'}] ---\n{json.dumps(final_response, indent=2, default=str)}")

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:frontend/core/utils/location_utils.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/dashboard_controller.dart';
 import '../../core/theme/app_theme.dart';
@@ -44,11 +45,8 @@ class OptimizationScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildMobileLayout(
-      BuildContext context,
-      Shipment currentShipment,
-      ShipmentOptimizationData? opt,
-      List<Map<String, dynamic>> allRoutes) {
+  Widget _buildMobileLayout(BuildContext context, Shipment currentShipment,
+      ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -82,11 +80,8 @@ class OptimizationScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildWideLayout(
-      BuildContext context,
-      Shipment currentShipment,
-      ShipmentOptimizationData? opt,
-      List<Map<String, dynamic>> allRoutes) {
+  Widget _buildWideLayout(BuildContext context, Shipment currentShipment,
+      ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Row(
@@ -340,6 +335,9 @@ class _ComparisonSection extends StatelessWidget {
           after: opt.after.time,
           icon: Icons.timer_outlined,
           savingLabel: timeSaved,
+          isSaving: (LocationUtils.parseDuration(opt.before.time) -
+                  LocationUtils.parseDuration(opt.after.time)) >=
+              0,
         ),
         const SizedBox(height: 12),
         _MetricRow(
@@ -347,8 +345,9 @@ class _ComparisonSection extends StatelessWidget {
           before: '\$${opt.before.cost.toStringAsFixed(2)}',
           after: '\$${opt.after.cost.toStringAsFixed(2)}',
           icon: Icons.payments_outlined,
-          savingLabel:
-              costSaved > 0 ? '-\$${costSaved.toStringAsFixed(2)}' : null,
+          savingLabel: costSaved != 0
+              ? '${costSaved > 0 ? '-' : '+'}\$${costSaved.abs().toStringAsFixed(2)}'
+              : null,
           isSaving: costSaved > 0,
         ),
         const SizedBox(height: 12),
@@ -357,8 +356,9 @@ class _ComparisonSection extends StatelessWidget {
           before: '${opt.before.fuel.toStringAsFixed(1)} L',
           after: '${opt.after.fuel.toStringAsFixed(1)} L',
           icon: Icons.local_gas_station_outlined,
-          savingLabel:
-              fuelSaved > 0 ? '-${fuelSaved.toStringAsFixed(1)} L' : null,
+          savingLabel: fuelSaved != 0
+              ? '${fuelSaved > 0 ? '-' : '+'}${fuelSaved.abs().toStringAsFixed(1)} L'
+              : null,
           isSaving: fuelSaved > 0,
         ),
       ],
@@ -366,9 +366,19 @@ class _ComparisonSection extends StatelessWidget {
   }
 
   String? _extractTimeDiff(String before, String after) {
-    // Simple display — just show both
     if (before == '--' || after == '--') return null;
-    return null; // Show actual times, no diff calculation needed
+
+    try {
+      final double b = LocationUtils.parseDuration(before);
+      final double a = LocationUtils.parseDuration(after);
+      final double diffSec = b - a;
+      final int diffMin = (diffSec / 60).round();
+
+      if (diffMin == 0) return '±0 mins';
+      return '${diffMin > 0 ? '-' : '+'}${diffMin.abs()} mins';
+    } catch (e) {
+      return null;
+    }
   }
 }
 
@@ -417,13 +427,14 @@ class _MetricRow extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppTheme.success.withValues(alpha: 0.1),
+                    color: (isSaving ? AppTheme.success : AppTheme.danger)
+                        .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     savingLabel!,
-                    style: const TextStyle(
-                      color: AppTheme.success,
+                    style: TextStyle(
+                      color: isSaving ? AppTheme.success : AppTheme.danger,
                       fontSize: 11,
                       fontWeight: FontWeight.w900,
                     ),
@@ -1001,12 +1012,14 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
         speedModifier: _speedModifier,
       );
 
-      if (result != null && result['success'] == true && result['analysis'] != null) {
+      if (result != null &&
+          result['success'] == true &&
+          result['analysis'] != null) {
         final analysis = result['analysis'] as Map<String, dynamic>;
         setState(() {
           _simulatedRisk = (analysis['risk_score'] as num).toDouble();
-          _simulatedDelay = analysis['predicted_delay_mins']?.toString() != null 
-              ? "${analysis['predicted_delay_mins']} mins" 
+          _simulatedDelay = analysis['predicted_delay_mins']?.toString() != null
+              ? "${analysis['predicted_delay_mins']} mins"
               : "0 mins";
           _useHeuristics = false;
           _lastAnalyzed = DateTime.now();
@@ -1134,7 +1147,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          _isInjecting 
+                          _isInjecting
                               ? 'WAITING FOR AI ANALYSIS...'
                               : (_useHeuristics
                                   ? 'HEURISTIC ESTIMATE'
@@ -1157,7 +1170,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                           const SizedBox(
                             width: 10,
                             height: 10,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.warning),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: AppTheme.warning),
                           ),
                       ],
                     ),
@@ -1166,7 +1180,10 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                         padding: const EdgeInsets.only(top: 4),
                         child: Text(
                           'Last Analyzed: ${_lastAnalyzed!.hour}:${_lastAnalyzed!.minute.toString().padLeft(2, '0')}:${_lastAnalyzed!.second.toString().padLeft(2, '0')}',
-                          style: const TextStyle(fontSize: 8, color: AppTheme.textMuted, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 8,
+                              color: AppTheme.textMuted,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                     const SizedBox(height: 12),
@@ -1204,7 +1221,8 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                   onPressed: _injectScenario,
                   icon: const Icon(Icons.input_rounded, size: 18),
                   label: const Text('INJECT INTO LIVE TRANSIT',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w900)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,

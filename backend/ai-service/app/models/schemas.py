@@ -74,6 +74,7 @@ class CostingAnalysis(BaseModel):
 
 class TimeAnalysis(BaseModel):
     estimated_minutes: float
+    delay_minutes: float
     delay_probability: float = Field(..., ge=0, le=1)
 
 class RiskFactors(BaseModel):

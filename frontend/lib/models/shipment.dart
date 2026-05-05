@@ -70,7 +70,8 @@ class Shipment {
       updatedAt: updatedAt ?? this.updatedAt,
       speedKmH: speedKmH ?? this.speedKmH,
       currentStepIndex: currentStepIndex ?? this.currentStepIndex,
-      simulationSpeedModifier: simulationSpeedModifier ?? this.simulationSpeedModifier,
+      simulationSpeedModifier:
+          simulationSpeedModifier ?? this.simulationSpeedModifier,
     );
   }
 
@@ -115,11 +116,14 @@ class Shipment {
     if (route.path.isEmpty) return 'Waiting for route';
 
     final progress = currentRouteIndex / route.path.length;
-    if (progress < 0.20) return origin.isNotEmpty ? '$origin corridor' : 'Origin corridor';
+    if (progress < 0.20)
+      return origin.isNotEmpty ? '$origin corridor' : 'Origin corridor';
     if (progress < 0.45) return 'En route';
     if (progress < 0.70) return 'Mid route';
     if (progress < 0.90) return 'Approaching destination';
-    return destination.isNotEmpty ? '$destination approach' : 'Destination approach';
+    return destination.isNotEmpty
+        ? '$destination approach'
+        : 'Destination approach';
   }
 
   factory Shipment.fromMap(String id, Map<String, dynamic> data) {
@@ -130,9 +134,7 @@ class Shipment {
 
     if (rawRouteData is List && rawRouteData.isNotEmpty) {
       primaryRouteMap = mapValue(rawRouteData[0]);
-      allRoutesList = rawRouteData
-          .map((r) => mapValue(r))
-          .toList();
+      allRoutesList = rawRouteData.map((r) => mapValue(r)).toList();
     } else if (rawRouteData is Map) {
       primaryRouteMap = mapValue(rawRouteData);
     }
@@ -154,7 +156,8 @@ class Shipment {
       updatedAt: dateTimeFromDynamic(data['updated_at']),
       speedKmH: numValue(data['speed_kmh']).toDouble(),
       currentStepIndex: numValue(data['current_step_index']).toInt(),
-      simulationSpeedModifier: numValue(data['simulation_speed_modifier'] ?? 1.0).toDouble(),
+      simulationSpeedModifier:
+          numValue(data['simulation_speed_modifier'] ?? 1.0).toDouble(),
     );
   }
 }
@@ -257,6 +260,7 @@ class ShipmentAiInsight {
     required this.explanation,
     this.optimization,
     this.allRoutes = const [],
+    this.reasoningTimestamp,
   });
 
   final bool success;
@@ -267,6 +271,7 @@ class ShipmentAiInsight {
   final String explanation;
   final ShipmentOptimizationData? optimization;
   final List<Map<String, dynamic>> allRoutes;
+  final DateTime? reasoningTimestamp;
 
   factory ShipmentAiInsight.fromMap(Map<String, dynamic> data) {
     // Parse all_routes from the AI response for multi-route display
@@ -281,26 +286,53 @@ class ShipmentAiInsight {
     // Structural support for enriched gateway response
     final aiInsights = data['ai_insights'] as Map<String, dynamic>?;
     final recommendation = aiInsights?['recommendation']?.toString();
-    
-    // Normalize risk score: Handle string levels and 0-100 scales
+
+    // Normalize risk score and level
     num rawScore = 0;
     if (data['risk_score'] is num) {
       rawScore = data['risk_score'];
     } else if (aiInsights?['delay_probability'] != null) {
       rawScore = numValue(aiInsights!['delay_probability']) / 100.0;
+    } else if (data['risk_score'] is String) {
+      // If it's a string like "HIGH", score it appropriately as a fallback
+      final s = data['risk_score'].toString().toUpperCase();
+      if (s == 'HIGH')
+        rawScore = 0.8;
+      else if (s == 'MEDIUM')
+        rawScore = 0.5;
+      else if (s == 'LOW') rawScore = 0.1;
+    }
+
+    String rLevel = stringValue(data['risk_level'], fallback: '');
+    if (rLevel.isEmpty) {
+      // Infer level from score if missing
+      if (rawScore > 0.6) {
+        rLevel = 'HIGH';
+      } else if (rawScore > 0.3) {
+        rLevel = 'MEDIUM';
+      } else {
+        rLevel = 'LOW';
+      }
     }
 
     return ShipmentAiInsight(
       success: data['success'] == true || data['ai_insights'] != null,
       riskScore: rawScore,
-      riskLevel: stringValue(data['risk_level'] ?? data['risk_score'], fallback: 'UNKNOWN'),
-      delayPrediction: stringValue(data['delay_prediction'] ?? data['estimated_time']?.toString(), fallback: '--'),
-      suggestion: stringValue(data['suggestion'] ?? recommendation, fallback: 'Awaiting recommendation'),
-      explanation: stringValue(data['insight'] ?? data['explanation'] ?? recommendation, fallback: ''),
+      riskLevel: rLevel,
+      delayPrediction: stringValue(
+          data['delay_prediction'] ?? data['estimated_time']?.toString(),
+          fallback: '--'),
+      suggestion: stringValue(data['suggestion'] ?? recommendation,
+          fallback: 'Awaiting recommendation'),
+      explanation: stringValue(
+          data['insight'] ?? data['explanation'] ?? recommendation,
+          fallback: ''),
       optimization: data['optimization_data'] != null
-          ? ShipmentOptimizationData.fromMap(mapValue(data['optimization_data']))
+          ? ShipmentOptimizationData.fromMap(
+              mapValue(data['optimization_data']))
           : null,
       allRoutes: allRoutes,
+      reasoningTimestamp: dateTimeFromDynamic(data['reasoning_timestamp']),
     );
   }
 }

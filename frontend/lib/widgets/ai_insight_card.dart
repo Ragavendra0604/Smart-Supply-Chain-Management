@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../controllers/dashboard_controller.dart';
 import '../core/theme/app_theme.dart';
 import '../models/shipment.dart';
 
@@ -12,6 +14,12 @@ class AiInsightCard extends StatelessWidget {
     if (!shipment.hasAnalysis) {
       return const SizedBox.shrink();
     }
+
+    final isRefreshing = context.watch<DashboardController>().isRefreshingAi;
+    final timestamp = shipment.ai.reasoningTimestamp;
+    final timeStr = timestamp != null
+        ? "${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}"
+        : "--:--";
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -28,16 +36,39 @@ class AiInsightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.auto_awesome, color: AppTheme.primary, size: 20),
-              SizedBox(width: 8),
+              Row(
+                children: [
+                  const Icon(Icons.auto_awesome,
+                      color: AppTheme.primary, size: 20),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'AI Analysis',
+                    style: TextStyle(
+                      color: AppTheme.primary,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  if (isRefreshing) ...[
+                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppTheme.primary),
+                    ),
+                  ],
+                ],
+              ),
               Text(
-                'AI Analysis',
-                style: TextStyle(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.w900,
-                  fontSize: 16,
+                'Updated $timeStr',
+                style: const TextStyle(
+                  color: AppTheme.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
@@ -61,7 +92,8 @@ class AiInsightCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.lightbulb_outline, color: AppTheme.warning, size: 18),
+                const Icon(Icons.lightbulb_outline,
+                    color: AppTheme.warning, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(

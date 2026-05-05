@@ -193,6 +193,8 @@ class DashboardController extends ChangeNotifier {
     required String shipmentId,
     required String origin,
     required String destination,
+    String mode = 'ROAD',
+    String priority = 'NORMAL',
   }) async {
     errorMessage = null;
     successMessage = null;
@@ -203,10 +205,12 @@ class DashboardController extends ChangeNotifier {
         shipmentId: shipmentId,
         origin: origin,
         destination: destination,
+        mode: mode,
+        priority: priority,
       );
-      successMessage = 'Shipment $shipmentId created successfully.';
+      successMessage = 'Shipment $shipmentId created successfully ($mode).';
       _apiService.logToServer(
-          'INFO', 'Manual shipment created', {'shipmentId': shipmentId});
+          'INFO', 'Manual shipment created', {'shipmentId': shipmentId, 'mode': mode});
       await refreshShipments();
       selectShipment(shipmentId);
     } catch (e) {

@@ -37,22 +37,32 @@ class LocationUtils {
     return value;
   }
 
-  /// Parses duration string like "1 hour 20 mins" to seconds.
+  /// Parses duration string like "1 hour 20 mins" or "6h 45m" to seconds.
   static double parseDuration(String duration) {
-    if (duration == '--') return 1;
+    if (duration == '--' || duration.isEmpty) return 1;
     final clean = duration.toLowerCase();
     double totalSeconds = 0;
     
-    final hourMatch = RegExp(r'(\d+)\s*hour').firstMatch(clean);
+    // Support h, hr, hour, hours
+    final hourMatch = RegExp(r'(\d+)\s*(h|hr|hour)').firstMatch(clean);
     if (hourMatch != null) {
       totalSeconds += double.parse(hourMatch.group(1)!) * 3600;
     }
     
-    final minMatch = RegExp(r'(\d+)\s*min').firstMatch(clean);
+    // Support m, min, mins, minutes
+    final minMatch = RegExp(r'(\d+)\s*(m|min|minute)').firstMatch(clean);
     if (minMatch != null) {
       totalSeconds += double.parse(minMatch.group(1)!) * 60;
     }
     
+    // If it's just a number (like "45 mins" but regex only got the 45)
+    if (totalSeconds == 0) {
+      final justNum = RegExp(r'^(\d+)$').firstMatch(clean.trim());
+      if (justNum != null) {
+        totalSeconds = double.parse(justNum.group(1)!) * 60;
+      }
+    }
+
     return totalSeconds > 0 ? totalSeconds : 1.0;
   }
 }

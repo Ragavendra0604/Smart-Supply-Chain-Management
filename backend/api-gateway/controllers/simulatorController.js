@@ -1,5 +1,5 @@
 import { db } from '../config/firebase.js';
-import mapsService from '../services/mapsService.js';
+import routeService from '../services/routeService.js';
 import { cacheManager } from '../utils/cache.js';
 
 /**
@@ -30,10 +30,13 @@ export const startSimulator = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Shipment record not found' });
     }
 
-    const { origin, destination } = shipmentDoc.data();
+    const { origin, destination, vehicle_type } = shipmentDoc.data();
     
-    // 3. Initialize Route Data (Stored in Firestore, not memory)
-    const routes = await mapsService.getRoute(origin, destination);
+    // 3. Initialize Route Data (Supports ROAD | AIR | SEA)
+    const routes = await routeService.getRoute(origin, destination, vehicle_type || 'ROAD');
+    if (!routes || routes.length === 0) {
+      return res.status(404).json({ success: false, message: 'No valid routes found for this shipment' });
+    }
     const route = routes[0];
 
     await db().collection('shipments').doc(shipment_id).update({
@@ -61,6 +64,9 @@ export const stopSimulator = async (req, res) => {
   const { shipment_id } = req.body;
   
   try {
+    if (!shipment_id) {
+      return res.status(400).json({ success: false, message: 'shipment_id is required' });
+    }
     if (shipment_id) {
       // 1. Update Firestore
       await db().collection('shipments').doc(shipment_id).update({

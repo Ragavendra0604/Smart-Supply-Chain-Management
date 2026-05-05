@@ -51,7 +51,7 @@ class EventManager {
       shipment_id: shipmentId,
       event_type: eventType,
       details: JSON.stringify(details),
-      timestamp: bigquery.datetime(new Date().toISOString())
+      timestamp: bigquery.datetime(new Date().toISOString().replace('Z', ''))
     };
 
     bqBuffer.push(row);

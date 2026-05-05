@@ -2,8 +2,11 @@ import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 
 const client = new SecretManagerServiceClient();
 
+let _cachedProjectId = null;
 const resolveProjectId = async () => {
-  return (
+  if (_cachedProjectId) return _cachedProjectId;
+
+  _cachedProjectId = (
     process.env.GOOGLE_CLOUD_PROJECT ||
     process.env.GCP_PROJECT ||
     process.env.GCLOUD_PROJECT ||
@@ -11,6 +14,7 @@ const resolveProjectId = async () => {
     (await client.getProjectId()) ||
     undefined
   );
+  return _cachedProjectId;
 };
 
 /**

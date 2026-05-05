@@ -100,7 +100,7 @@ class _DetailHeader extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(shipment.shipmentId, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                      Text('Last updated: ${DateTime.now().hour}:${DateTime.now().minute}', style: const TextStyle(color: Colors.white70)),
+                      Text('Last updated: ${shipment.updatedAt != null ? "${shipment.updatedAt!.hour.toString().padLeft(2, '0')}:${shipment.updatedAt!.minute.toString().padLeft(2, '0')}" : "Just now"}', style: const TextStyle(color: Colors.white70)),
                     ],
                   ),
                 ),

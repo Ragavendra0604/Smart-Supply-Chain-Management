@@ -38,29 +38,42 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
     #     return 0.0
         
     try:
-        # ML DISABLED: Moving intelligence to Gemini AI as requested
-        # Using a base heuristic for the 'Risk Engine' math while AI generates reasoning
-        base_dur = route.get("duration_seconds") or 1
-        traffic_dur = route.get("traffic_duration_seconds") or base_dur
+        base_dur_sec = route.get("duration_seconds") or 1
+        traffic_dur_sec = route.get("traffic_duration_seconds") or base_dur_sec
         
-        # Calculate heuristic delay based on What-If sliders
-        traffic_impact = (base_dur / 60) * (traffic_level - 1.0)
-        speed_impact = (base_dur / 60) * (1.0 - speed_modifier)
+        # 1. Start with REAL-WORLD delay from Google Maps (if any)
+        google_delay_min = max(0.0, (traffic_dur_sec - base_dur_sec) / 60.0)
         
-        weather_impact = 0
+        # 2. Add/Subtract SIMULATED delay from What-If sliders
+        # traffic_level 1.0 = no change to baseline. > 1.0 = more traffic.
+        sim_traffic_impact = (base_dur_sec / 60.0) * max(0.0, traffic_level - 1.0)
+        
+        # speed_modifier 1.0 = normal. 0.5 = half speed (adds duration).
+        sim_speed_impact = 0.0
+        if speed_modifier < 1.0 and speed_modifier > 0:
+            sim_speed_impact = (base_dur_sec / 60.0) * (1.0 / speed_modifier - 1.0)
+        elif speed_modifier > 1.0:
+            sim_speed_impact = (base_dur_sec / 60.0) * (1.0 / speed_modifier - 1.0) # Will be negative (saving time)
+            
+        # 3. Weather impact (now proportional to duration + base penalty)
+        weather_impact = 0.0
         cond = (weather.get("condition") or "clear").lower()
-        if "storm" in cond: weather_impact = 45
-        elif "rain" in cond: weather_impact = 15
+        base_min = base_dur_sec / 60.0
         
-        prediction = max(0.0, float(traffic_impact + speed_impact + weather_impact))
+        if "storm" in cond or "flood" in cond:
+            weather_impact = 20.0 + (base_min * 0.4) # 20m base + 40% slowdown
+        elif "rain" in cond or "snow" in cond or "fog" in cond:
+            weather_impact = 5.0 + (base_min * 0.15) # 5m base + 15% slowdown
+        
+        prediction = google_delay_min + sim_traffic_impact + sim_speed_impact + weather_impact
         
         mode_upper = mode.upper()
-        if mode_upper == "AIR": prediction *= 0.4
-        elif mode_upper == "SEA": prediction *= 2.5
+        if mode_upper == "AIR": prediction *= 0.3 # Air is less affected by ground traffic/weather
+        elif mode_upper == "SEA": prediction *= 1.8 # Sea is slow and very weather dependent
             
-        return round(prediction, 2)
+        return round(max(0.0, prediction), 2)
     except Exception as e:
-        logger.error(f"Heuristic Fallback Error: {e}")
+        logger.error(f"Heuristic Delay Error: {e}")
         return 0.0
 
 def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD", 
@@ -95,21 +108,8 @@ def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any],
         total_cost = round(dist_km * COST_PER_KM, 2)
         total_fuel = round(dist_km * FUEL_PER_KM, 1)
         
-        # Base delay from 'Smart Heuristic' (ML is currently commented out)
+        # Base delay from 'Smart Heuristic' (Now handles traffic/speed/weather centrally)
         predicted_delay_mins = get_ml_delay_prediction(route, weather, mode, traffic_level, speed_modifier)
-        
-        # --- OVERRIDE INJECTION ---
-        # Apply the tactical traffic level (What-if slider)
-        # If traffic_level > 1.0, we add proportional delay
-        if traffic_level > 1.0:
-            injected_traffic_delay = duration_min * (traffic_level - 1.0) * 0.5
-            predicted_delay_mins += injected_traffic_delay
-            
-        # Apply the tactical speed modifier (What-if slider)
-        # Speed modifier 0.5 means half speed (doubles duration)
-        if speed_modifier < 1.0:
-            slowdown_penalty = duration_min * (1.0 - speed_modifier)
-            predicted_delay_mins += slowdown_penalty
             
         # --- HOLISTIC RISK SCORING ENGINE ---
         # 1. Base Risk (Traffic/ML Delay)
@@ -198,7 +198,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
                 "weather": {"condition": (data.weatherData or {}).get("condition", "Clear"), "severity_index": 0.1},
                 "fuel": {"fuel_price_per_litre": 1.2, "consumption_kmpl": 12.0, "fuel_cost": 0.0},
                 "costing": {"base_cost": 100.0, "fuel_cost": 0.0, "total_cost": 100.0},
-                "time": {"estimated_minutes": 0.0, "delay_probability": risk_score},
+                "time": {"estimated_minutes": 0.0, "delay_minutes": 0.0, "delay_probability": risk_score},
                 "risk": {
                     "score": risk_score,
                     "level": risk_level,
@@ -268,7 +268,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
                     "weather": {{ "condition": "...", "severity_index": 0–1 }},
                     "fuel": {{ "fuel_price_per_litre": number, "consumption_kmpl": number, "fuel_cost": number }},
                     "costing": {{ "base_cost": number, "fuel_cost": number, "total_cost": number }},
-                    "time": {{ "estimated_minutes": number, "delay_probability": 0–1 }},
+                    "time": {{ "estimated_minutes": number, "delay_minutes": number, "delay_probability": 0–1 }},
                     "risk": {{ "score": 0–1, "level": "LOW|MEDIUM|HIGH", "factors": {{ "traffic": number, "weather": number, "route": number }} }},
                     "ai_insights": {{ "decision": "GO|HOLD|REROUTE", "confidence": 0–1, "bottlenecks": [], "recommendation": "clear actionable instruction" }}
                 }}

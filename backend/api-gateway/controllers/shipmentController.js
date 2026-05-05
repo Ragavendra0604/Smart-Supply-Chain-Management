@@ -37,7 +37,7 @@ const performAnalysis = async (shipment_id) => {
       console.error('[ROUTE ERROR]', err.message);
       return [];
     }),
-    weatherService.getWeather(shipment.destination).catch(() => ({ condition: 'Clear', temperature: 25 })),
+    weatherService.getWeather(shipment.destination).catch(() => weatherService.getWeatherFallback()),
     newsService.getNews(shipment.origin, shipment.destination).catch(() => [])
   ]);
 
@@ -65,15 +65,18 @@ const performAnalysis = async (shipment_id) => {
 
   const enriched_data = {
     traffic: {
-      duration_with_traffic: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
-      traffic_duration: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
+      duration_with_traffic: bestRoute.travel_time_min ? `${Math.round(bestRoute.travel_time_min)} mins` : 'N/A',
+      traffic_duration: bestRoute.travel_time_min ? `${Math.round(bestRoute.travel_time_min)} mins` : 'N/A',
       congestion_level: aiResponse.risk_level === 'HIGH' ? 'HEAVY' : aiResponse.risk_level === 'MEDIUM' ? 'MODERATE' : 'LOW'
     },
     fuel_cost: bestRoute.total_fuel || 0,
     estimated_time: bestRoute.travel_time_min || 0,
     estimated_cost: bestRoute.total_cost || 0,
-    traffic_duration: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
-    risk_score: aiResponse.risk_level, // "LOW | MEDIUM | HIGH"
+    traffic_duration: bestRoute.travel_time_min ? `${Math.round(bestRoute.travel_time_min)} mins` : 'N/A',
+    risk_score: aiResponse.ai_insights?.delay_probability > 1 
+      ? (aiResponse.ai_insights.delay_probability / 100) 
+      : (aiResponse.ai_insights?.delay_probability || aiResponse.risk_score || 0),
+    risk_level: aiResponse.risk_level || 'UNKNOWN',
     ai_insights: {
       delay_probability: aiResponse.ai_insights?.delay_probability || 0,
       bottlenecks: aiResponse.ai_insights?.bottlenecks || [],
@@ -154,7 +157,7 @@ const simulateShipment = async (req, res) => {
 
     const weatherData = {
       condition: weatherCondition || (shipment.weatherData?.condition || 'Clear'),
-      temperature: 25
+      temperature: shipment.weatherData?.temperature || 25
     };
 
     // 3. AI Inference with Simulation Context
@@ -186,11 +189,40 @@ const applyRoute = async (req, res) => {
     if (!shipment_id) throw new Error('shipment_id is required');
 
     const shipmentRef = db().collection('shipments').doc(shipment_id);
-    await shipmentRef.update({
+    const doc = await shipmentRef.get();
+    if (!doc.exists) throw new Error('Shipment not found');
+    const shipment = doc.data();
+
+    // Find the recommended route to promote it to primary
+    const aiResponse = shipment.aiResponse || {};
+    const allRoutes = aiResponse.all_routes || [];
+    const recommendedRoute = allRoutes.find(r => r.is_recommended);
+
+    let updateData = {
       status: 'ROUTE_APPLIED',
       route_applied_at: new Date(),
       updated_at: new Date()
-    });
+    };
+
+    if (recommendedRoute) {
+      // If we have a recommended route object, we should ideally have its path data too.
+      // But all_routes in AI response might not have full path. 
+      // The mapsService.getRoute returns full path.
+      // For now, let's just mark it. In a real system, we'd swap the actual path data.
+      console.log(`[APPLY] Promoting recommended route: ${recommendedRoute.summary}`);
+      
+      // If routeData exists, we should try to match it
+      const currentRoutes = shipment.routeData || [];
+      const matchIndex = currentRoutes.findIndex(r => r.summary === recommendedRoute.summary);
+      if (matchIndex > 0) {
+        const newRoutes = [...currentRoutes];
+        const [moved] = newRoutes.splice(matchIndex, 1);
+        newRoutes.unshift(moved);
+        updateData.routeData = newRoutes;
+      }
+    }
+
+    await shipmentRef.update(updateData);
 
     eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch(() => { });
 

@@ -205,6 +205,8 @@ class ApiService {
     required String shipmentId,
     required String origin,
     required String destination,
+    String mode = 'ROAD',
+    String priority = 'NORMAL',
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/create-shipment');
     final response = await _client.post(
@@ -214,6 +216,8 @@ class ApiService {
         'shipment_id': shipmentId,
         'origin': origin,
         'destination': destination,
+        'mode': mode,
+        'priority': priority,
       }),
     );
 

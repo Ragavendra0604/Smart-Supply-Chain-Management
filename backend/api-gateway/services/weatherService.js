@@ -3,6 +3,15 @@ import { cacheManager } from '../utils/cache.js';
 
 const WEATHER_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
+export const getWeatherFallback = () => ({
+  condition: "Partly Cloudy",
+  temperature: 20,
+  humidity: 50,
+  windSpeed: 10,
+  fallback: true,
+  note: "Using regional average (API Unavailable)"
+});
+
 export const getWeather = async (city) => {
   const cacheKey = `weather:${city.toLowerCase()}`;
   const cached = cacheManager.get(cacheKey);
@@ -33,15 +42,9 @@ export const getWeather = async (city) => {
   } catch (error) {
     console.error("Weather API Error:", error.message);
 
-    return {
-      condition: "Clear",
-      temperature: 30,
-      humidity: 50,
-      windSpeed: 5,
-      fallback: true
-    };
+    return getWeatherFallback();
   }
 };
 
 
-export default { getWeather };
+export default { getWeather, getWeatherFallback };
