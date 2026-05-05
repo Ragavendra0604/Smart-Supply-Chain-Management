@@ -120,6 +120,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             vehicle_health=shipment_data.get("vehicle_health", "Good"),
             model_name=shipment_data.get("ai_config", {}).get("model") or "gemini-2.5-flash"
         )
+        # Optimization: Use summarized routes to save AI tokens
+        input_data.routeData = processed_routes
         insight = generate_logistics_insight(
             best['risk_score'], 
             f"{best['predicted_delay_mins']} mins", 
@@ -229,6 +231,9 @@ def handle_predict(data: InputData):
                 data.vehicle_health = ship_data.get("vehicle_health", data.vehicle_health)
 
         # --- STRATEGIC ENGINE PROCESSING ---
+        # Optimization: Pass the summarized scored_routes to save tokens
+        data.routeData = scored_routes 
+        
         engine_data = generate_logistics_insight(
             best["risk_score"], 
             f"{best['predicted_delay_mins']} mins", 

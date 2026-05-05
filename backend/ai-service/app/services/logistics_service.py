@@ -52,13 +52,13 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         if "storm" in cond: weather_impact = 45
         elif "rain" in cond: weather_impact = 15
         
-        prediction = traffic_impact + speed_impact + weather_impact
+        prediction = max(0.0, float(traffic_impact + speed_impact + weather_impact))
         
         mode_upper = mode.upper()
         if mode_upper == "AIR": prediction *= 0.4
         elif mode_upper == "SEA": prediction *= 2.5
             
-        return round(float(prediction), 2)
+        return round(prediction, 2)
     except Exception as e:
         logger.error(f"Heuristic Fallback Error: {e}")
         return 0.0
@@ -243,9 +243,9 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             - Speed Modifier: {data.speed_modifier}
 
             AVAILABLE DATA SOURCES (MANDATORY USAGE):
-            - Route: {json.dumps(data.routeData) if data.routeData else "[]"}
+            - Route Summary: {json.dumps([{"summary": r.get("summary"), "distance": r.get("distance_km"), "duration": r.get("travel_time_min")} for r in (data.routeData if isinstance(data.routeData, list) else [])]) if data.routeData else "[]"}
             - Weather: {weather_condition}
-            - News/Disruptions: {json.dumps(data.newsData) if data.newsData else "[]"}
+            - News/Disruptions: {json.dumps([{"title": n.get("title")} for n in (data.newsData if data.newsData else [])]) if data.newsData else "[]"}
 
             STRICT REQUIREMENTS:
             1. Return ONLY valid JSON. No explanations, no extra text.

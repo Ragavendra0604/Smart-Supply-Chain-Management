@@ -66,11 +66,13 @@ const performAnalysis = async (shipment_id) => {
   const enriched_data = {
     traffic: {
       duration_with_traffic: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
+      traffic_duration: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
       congestion_level: aiResponse.risk_level === 'HIGH' ? 'HEAVY' : aiResponse.risk_level === 'MEDIUM' ? 'MODERATE' : 'LOW'
     },
     fuel_cost: bestRoute.total_fuel || 0,
     estimated_time: bestRoute.travel_time_min || 0,
     estimated_cost: bestRoute.total_cost || 0,
+    traffic_duration: bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A',
     risk_score: aiResponse.risk_level, // "LOW | MEDIUM | HIGH"
     ai_insights: {
       delay_probability: aiResponse.ai_insights?.delay_probability || 0,
@@ -80,6 +82,12 @@ const performAnalysis = async (shipment_id) => {
   };
 
   // 5. ATOMIC PERSISTENCE
+  // Sync the AI's predicted traffic duration into the primary route for UI consistency
+  if (routes.length > 0) {
+    routes[0].traffic_duration = bestRoute.travel_time_min ? `${bestRoute.travel_time_min} mins` : 'N/A';
+    routes[0].duration = bestRoute.raw_duration_min ? `${bestRoute.raw_duration_min} mins` : routes[0].duration;
+  }
+
   const shipmentRef = db().collection('shipments').doc(shipment_id);
   await shipmentRef.update({
     ...enriched_data,
