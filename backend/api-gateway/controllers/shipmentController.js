@@ -14,7 +14,7 @@ import { sanitizeAiResponse } from '../utils/validation.js';
  * Orchestrates multi-service data fetching and AI inference in parallel.
  * Target Latency: < 2s | Performance: Parallel Async | Cost: Caching + Cooldown.
  */
-const performAnalysis = async (shipment_id, traceId = null) => {
+const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = false) => {
   // 1. DATA ACCESS & COOLDOWN LAYER
   const doc = await db().collection('shipments').doc(shipment_id).get();
   if (!doc.exists) throw new Error('Shipment not found');
@@ -23,9 +23,10 @@ const performAnalysis = async (shipment_id, traceId = null) => {
   const mode = shipment.vehicle_type || 'ROAD';
 
   // IDEMPOTENCY & COST PROTECTION: Use a 5-minute cooldown for repeated analysis
+  // bypassCooldown=true is used by inject-simulation to ensure injected params are reflected
   const lastAnalyzed = shipment.aiResponse?.last_analyzed?.toDate();
   const now = new Date();
-  if (lastAnalyzed && (now - lastAnalyzed < 5 * 60 * 1000) && shipment.status === 'ANALYZED') {
+  if (!bypassCooldown && lastAnalyzed && (now - lastAnalyzed < 5 * 60 * 1000) && shipment.status === 'ANALYZED') {
     console.log(`[PIPELINE] Using cached analysis for ${shipment_id} (Cooldown active)`);
     return shipment.aiResponse;
   }
@@ -190,7 +191,9 @@ const simulateShipment = async (req, res) => {
 
 const applyRoute = async (req, res) => {
   try {
-    const { shipment_id } = req.body;
+    // Support both PATCH /api/shipments/:shipment_id/apply-route (URL param)
+    // and POST /apply-route (body field) — Flutter uses the PATCH variant
+    const shipment_id = req.params?.shipment_id || req.body?.shipment_id;
     if (!shipment_id) throw new Error('shipment_id is required');
 
     const shipmentRef = db().collection('shipments').doc(shipment_id);
@@ -256,7 +259,8 @@ const injectSimulation = async (req, res) => {
     await db().collection('shipments').doc(shipment_id).update(updateData);
 
     // AI TRIGGER: Force re-analysis to refresh reasoning and metrics based on injected state
-    const analysisResult = await performAnalysis(shipment_id, req.traceId).catch(err => {
+    // bypassCooldown=true ensures the new weather/traffic params are always reflected.
+    const analysisResult = await performAnalysis(shipment_id, req.traceId, true).catch(err => {
       console.error('[INJECT-AI] Analysis trigger failed:', err.message);
       return null;
     });

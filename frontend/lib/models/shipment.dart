@@ -413,7 +413,10 @@ class DeliverySummary {
       summary: stringValue(data['summary'], fallback: ''),
       keyInsights: listValue(data['key_insights']).map((e) => e.toString()).toList(),
       maintenanceFlag: data['maintenance_flag'] == true,
-      maintenanceReason: stringValue(data['maintenance_reason'], fallback: ''),
+      maintenanceReason: (data['maintenance_reason'] != null &&
+              data['maintenance_reason'].toString().isNotEmpty)
+          ? data['maintenance_reason'].toString()
+          : null,
       nextShipmentRecommendation:
           stringValue(data['next_shipment_recommendation'], fallback: ''),
     );

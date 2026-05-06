@@ -43,6 +43,7 @@ export const startSimulator = async (req, res) => {
       status: 'IN_TRANSIT',
       routeData: routes,
       current_step_index: 0,
+      simulation_started_at: new Date(),   // ← used by deliveryController for accurate duration
       updated_at: new Date()
     });
 

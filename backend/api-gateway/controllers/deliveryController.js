@@ -42,24 +42,56 @@ export const completeDelivery = async (req, res) => {
     }
 
     // 2. Extract telemetry from stored Firestore fields
-    const routeData = Array.isArray(data.routeData) ? data.routeData[0] : (data.routeData || {});
+    const routeData  = Array.isArray(data.routeData) ? data.routeData[0] : (data.routeData || {});
     const aiResponse = data.aiResponse || {};
 
-    const distanceKm      = parseFloat(routeData.distance_km || 0);
-    const plannedMin      = parseFloat(routeData.travel_time_min || routeData.duration_seconds / 60 || 0);
-    const totalCost       = parseFloat(routeData.total_cost || aiResponse.optimization_data?.after?.cost || 0);
-    const totalFuel       = parseFloat(routeData.total_fuel || aiResponse.optimization_data?.after?.fuel || 0);
-    const peakRiskScore   = parseFloat(aiResponse.risk_score || 0);
-    const weather         = (data.weatherData || {}).condition || 'Clear';
+    // --- ROBUST DISTANCE EXTRACTION ---
+    // Priority: AI-processed distance_km → raw distance_meters → text parse → aiResponse routes
+    let distanceKm = 0;
+    if (routeData.distance_km > 0) {
+      // Python AI service already converted to km
+      distanceKm = parseFloat(routeData.distance_km);
+    } else if (routeData.distance_meters > 0) {
+      // Raw Google Maps value (always present)
+      distanceKm = parseFloat((routeData.distance_meters / 1000).toFixed(2));
+    } else if (routeData.distance && typeof routeData.distance === 'string') {
+      // e.g. "142 km" or "142.5 km" or "890 m"
+      const distMatch = routeData.distance.match(/([\d,.]+)\s*(km|m)/i);
+      if (distMatch) {
+        const val = parseFloat(distMatch[1].replace(',', ''));
+        distanceKm = distMatch[2].toLowerCase() === 'm' ? val / 1000 : val;
+      }
+    }
+    // Last resort: check AI-processed all_routes inside aiResponse
+    if (distanceKm === 0 && aiResponse.all_routes?.length > 0) {
+      const bestRoute = aiResponse.all_routes.find(r => r.is_recommended) ?? aiResponse.all_routes[0];
+      distanceKm = parseFloat(bestRoute.distance_km || 0);
+    }
+    distanceKm = parseFloat(distanceKm.toFixed(2));
+
+    // --- OTHER TELEMETRY FIELDS ---
+    const plannedMin    = parseFloat(routeData.travel_time_min || (routeData.duration_seconds / 60) || 0);
+    const totalCost     = parseFloat(routeData.total_cost || aiResponse.optimization_data?.after?.cost || 0);
+    const totalFuel     = parseFloat(routeData.total_fuel || aiResponse.optimization_data?.after?.fuel || 0);
+    const peakRiskScore = parseFloat(aiResponse.risk_score || 0);
+    const weather       = (data.weatherData || {}).condition || 'Clear';
     const newsDisruptions = (data.newsData || []).length;
 
-    // Actual duration: use createdAt → now (capped at 24h to avoid outliers)
-    const createdAt = data.created_at?.toDate?.() ?? new Date();
-    const elapsedMs = Math.min(Date.now() - createdAt.getTime(), 86400 * 1000);
-    const actualMin = Math.round(elapsedMs / 60000);
+    console.log(`[DELIVERY] ${shipment_id} telemetry: distanceKm=${distanceKm}, plannedMin=${plannedMin}, source=${routeData.source || 'stored'}`);
 
-    // Average speed estimation: distance / actual time
-    const avgSpeedKmH = actualMin > 0 ? parseFloat(((distanceKm / actualMin) * 60).toFixed(1)) : 0;
+
+    // Actual duration: prefer simulation_started_at (stamped when sim begins)
+    // Fallback to created_at. Cap at 24h to avoid outliers for long-idle shipments.
+    const simStartedAt = data.simulation_started_at?.toDate?.() ?? null;
+    const createdAt    = data.created_at?.toDate?.() ?? new Date();
+    const startRef     = simStartedAt ?? createdAt;
+    const elapsedMs    = Math.min(Date.now() - startRef.getTime(), 86400 * 1000);
+    const actualMin    = Math.max(1, Math.round(elapsedMs / 60000));
+
+    // Average speed estimation: distance / actual trip time
+    const avgSpeedKmH = (distanceKm > 0 && actualMin > 0)
+      ? parseFloat(((distanceKm / actualMin) * 60).toFixed(1))
+      : 0;
 
     // 3. Call AI Service for the delivery summary
     const summaryPayload = {
@@ -110,13 +142,26 @@ export const completeDelivery = async (req, res) => {
 
     // Heuristic fallback if AI service is unavailable
     if (!deliverySummary) {
-      const delayVariance = actualMin - plannedMin;
-      const onTime = delayVariance <= 5;
-      const efficiency = plannedMin > 0
-        ? Math.max(0, Math.min(1, 1 - Math.abs(delayVariance) / plannedMin))
-        : (onTime ? 1 : 0.6);
-      const grade = efficiency >= 0.90 ? 'A' : efficiency >= 0.75 ? 'B' : efficiency >= 0.55 ? 'C' : 'D';
-      const maintenanceFlag = peakRiskScore >= 0.7 || efficiency < 0.55;
+      const delayVariance  = actualMin - plannedMin;
+      const onTime         = delayVariance <= 5;
+
+      // Telemetry validation (mirrors Python AI service logic)
+      const hasTelemetryIssue = distanceKm === 0 || (avgSpeedKmH === 0 && actualMin > 0);
+
+      let efficiency, grade;
+      if (hasTelemetryIssue) {
+        // Can't trust distance/speed — grade purely on timing
+        efficiency = onTime ? 0.95 : 0.5;
+        grade      = onTime ? 'A' : 'C';
+      } else {
+        efficiency = plannedMin > 0
+          ? Math.max(0, Math.min(1, 1 - Math.abs(delayVariance) / plannedMin))
+          : (onTime ? 1 : 0.6);
+        grade = efficiency >= 0.90 ? 'A' : efficiency >= 0.75 ? 'B' : efficiency >= 0.55 ? 'C' : 'D';
+      }
+
+      // Maintenance: only fire on genuine issues, NOT on telemetry gaps
+      const maintenanceFlag = !hasTelemetryIssue && (peakRiskScore >= 0.7 || efficiency < 0.55);
 
       deliverySummary = {
         success: true,
@@ -124,11 +169,13 @@ export const completeDelivery = async (req, res) => {
         delay_variance_mins: parseFloat(delayVariance.toFixed(1)),
         efficiency_rating: parseFloat(efficiency.toFixed(3)),
         performance_grade: grade,
-        summary: `Shipment ${shipment_id} from ${data.origin || 'origin'} to ${data.destination || 'destination'} delivered ${onTime ? 'on time' : `${Math.abs(Math.round(delayVariance))} mins late`}. Grade: ${grade}.`,
+        telemetry_quality: hasTelemetryIssue ? 'DEGRADED' : 'VALID',
+        summary: `Shipment ${shipment_id} from ${data.origin || 'origin'} to ${data.destination || 'destination'} delivered ${onTime ? 'on time' : `${Math.abs(Math.round(delayVariance))} mins late`}. Grade: ${grade}.`
+          + (hasTelemetryIssue ? ' ⚠️ Grade based on timing only — telemetry incomplete.' : ''),
         key_insights: [
           `Delivery was ${onTime ? 'on time ✅' : `${Math.abs(Math.round(delayVariance))} mins late ⚠️`}`,
           `Efficiency: ${(efficiency * 100).toFixed(0)}%`,
-          `Avg speed: ${avgSpeedKmH} km/h`,
+          hasTelemetryIssue ? '⚠️ Speed/distance telemetry unavailable' : `Avg speed: ${avgSpeedKmH} km/h`,
           `Peak risk: ${(peakRiskScore * 100).toFixed(0)}%`,
         ],
         maintenance_flag: maintenanceFlag,

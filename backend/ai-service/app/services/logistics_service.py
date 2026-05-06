@@ -372,9 +372,10 @@ def generate_delivery_summary(req: DeliverySummaryRequest) -> dict:
             grade = "D"
         efficiency_caveat = None
 
-    # Maintenance flag: high risk score OR poor efficiency (skip if telemetry invalid)
-    # Add vehicle inspection flag if telemetry is suspect
-    maintenance_flag = (req.peak_risk_score >= 0.7 or efficiency_rating < 0.55) or has_telemetry_issue
+    # Maintenance flag: only genuine vehicle issues (high risk score or poor efficiency).
+    # Telemetry degradation is a DATA QUALITY issue, not a vehicle maintenance issue.
+    # The telemetry status is already surfaced separately in the UI via key_insights icons.
+    maintenance_flag = (req.peak_risk_score >= 0.7 or efficiency_rating < 0.55) and not has_telemetry_issue
 
     # Deterministic fallback (returned if AI call fails)
     delay_label = f"{abs(delay_variance):.0f} min{'s' if abs(delay_variance) != 1 else ''}"

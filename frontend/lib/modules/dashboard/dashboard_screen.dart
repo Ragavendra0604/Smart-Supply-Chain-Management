@@ -805,19 +805,49 @@ class _DeliverySummaryDialog extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              ...summary.keyInsights.map((insight) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle_outline,
-                            size: 14, color: AppTheme.success),
-                        const SizedBox(width: 8),
-                        Expanded(
-                            child: Text(insight,
-                                style: const TextStyle(fontSize: 13))),
-                      ],
-                    ),
-                  )),
+              ...summary.keyInsights.map((insight) {
+                    final lowerInsight = insight.toLowerCase();
+                    final isNegative = lowerInsight.contains('degrad') ||
+                        lowerInsight.contains('zero') ||
+                        lowerInsight.contains('fail') ||
+                        lowerInsight.contains('missing') ||
+                        lowerInsight.contains('error') ||
+                        lowerInsight.contains('unavailable') ||
+                        lowerInsight.contains('no distance') ||
+                        lowerInsight.contains('no speed') ||
+                        lowerInsight.contains('maintenance') ||
+                        lowerInsight.contains('issue') ||
+                        lowerInsight.contains('flag');
+                    final isWarning = lowerInsight.contains('below') ||
+                        lowerInsight.contains('far') ||
+                        lowerInsight.contains('duration');
+
+                    final IconData iconData = isNegative
+                        ? Icons.cancel_outlined
+                        : (isWarning
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle_outline);
+                    final Color iconColor = isNegative
+                        ? AppTheme.danger
+                        : (isWarning ? AppTheme.warning : AppTheme.success);
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Icon(iconData, size: 14, color: iconColor),
+                          const SizedBox(width: 8),
+                          Expanded(
+                              child: Text(insight,
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      color: isNegative
+                                          ? AppTheme.danger
+                                          : null))),
+                        ],
+                      ),
+                    );
+                  }),
               const SizedBox(height: 24),
               if (summary.maintenanceFlag)
                 Container(
