@@ -324,30 +324,57 @@ def generate_delivery_summary(req: DeliverySummaryRequest) -> dict:
     Post-delivery intelligence report.
     Deterministic metrics are computed first (always available).
     Gemini enriches with narrative + maintenance assessment.
+    
+    TELEMETRY VALIDATION: Flags incomplete/corrupted sensor data separately from performance.
     """
+    # --- 0. TELEMETRY VALIDATION ---
+    # Check for missing or corrupted telemetry data
+    telemetry_anomalies = []
+    
+    if req.distance_km == 0.0:
+        telemetry_anomalies.append("No distance data recorded")
+    
+    if req.avg_speed_kmh == 0.0 and req.actual_duration_min > 0:
+        telemetry_anomalies.append("Zero speed despite duration")
+    
+    # Sanity check: if distance > 0 but speed = 0, telemetry is broken
+    if req.distance_km > 0 and req.avg_speed_kmh == 0.0:
+        telemetry_anomalies.append("Distance recorded but no speed data")
+    
+    has_telemetry_issue = len(telemetry_anomalies) > 0
+    
     # --- 1. DETERMINISTIC PERFORMANCE METRICS ---
     delay_variance = round(req.actual_duration_min - req.planned_duration_min, 1)
     on_time = delay_variance <= 5.0  # 5-min tolerance
 
     # Efficiency = how close to plan (capped 0–1)
-    if req.planned_duration_min > 0:
-        raw_eff = 1.0 - (abs(delay_variance) / req.planned_duration_min)
-        efficiency_rating = round(max(0.0, min(1.0, raw_eff)), 3)
+    # ONLY calculate if telemetry is valid; otherwise default to timing-only assessment
+    if has_telemetry_issue:
+        # Fallback: Only use on-time status, not telemetry-based efficiency
+        efficiency_rating = 0.95 if on_time else 0.5
+        grade = "A" if on_time else "C"
+        efficiency_caveat = "⚠️ Incomplete telemetry - grade based on timing only"
     else:
-        efficiency_rating = 1.0 if on_time else 0.6
+        if req.planned_duration_min > 0:
+            raw_eff = 1.0 - (abs(delay_variance) / req.planned_duration_min)
+            efficiency_rating = round(max(0.0, min(1.0, raw_eff)), 3)
+        else:
+            efficiency_rating = 1.0 if on_time else 0.6
+        
+        # Grade: A ≥0.90, B ≥0.75, C ≥0.55, D <0.55
+        if efficiency_rating >= 0.90:
+            grade = "A"
+        elif efficiency_rating >= 0.75:
+            grade = "B"
+        elif efficiency_rating >= 0.55:
+            grade = "C"
+        else:
+            grade = "D"
+        efficiency_caveat = None
 
-    # Grade: A ≥0.90, B ≥0.75, C ≥0.55, D <0.55
-    if efficiency_rating >= 0.90:
-        grade = "A"
-    elif efficiency_rating >= 0.75:
-        grade = "B"
-    elif efficiency_rating >= 0.55:
-        grade = "C"
-    else:
-        grade = "D"
-
-    # Maintenance flag: high risk score OR poor efficiency
-    maintenance_flag = req.peak_risk_score >= 0.7 or efficiency_rating < 0.55
+    # Maintenance flag: high risk score OR poor efficiency (skip if telemetry invalid)
+    # Add vehicle inspection flag if telemetry is suspect
+    maintenance_flag = (req.peak_risk_score >= 0.7 or efficiency_rating < 0.55) or has_telemetry_issue
 
     # Deterministic fallback (returned if AI call fails)
     delay_label = f"{abs(delay_variance):.0f} min{'s' if abs(delay_variance) != 1 else ''}"
@@ -359,16 +386,23 @@ def generate_delivery_summary(req: DeliverySummaryRequest) -> dict:
         f"Fuel used: {req.total_fuel:.1f} L. "
         f"Overall cost: ${req.total_cost:.2f}. "
         f"Performance grade: {grade}."
+        + (f" ⚠️ {efficiency_caveat}" if efficiency_caveat else "")
     )
+    
     fallback_insights = [
         f"Delivery was {'on time ✅' if on_time else f'late by {delay_label} ⚠️'}",
         f"Efficiency rating: {efficiency_rating * 100:.0f}%",
-        f"Average speed: {req.avg_speed_kmh:.1f} km/h",
+        f"Average speed: {req.avg_speed_kmh:.1f} km/h" if not has_telemetry_issue else "⚠️ Speed telemetry unavailable",
         f"Peak risk encountered: {req.peak_risk_score * 100:.0f}%",
         f"Weather: {req.weather_encountered}",
     ]
+    
+    if has_telemetry_issue:
+        fallback_insights.append(f"⚠️ TELEMETRY ALERT: {'; '.join(telemetry_anomalies)}")
+    
     fallback_recommendation = (
-        "Schedule routine maintenance." if maintenance_flag
+        "Investigate sensor/telematics system and schedule routine maintenance." if has_telemetry_issue
+        else "Schedule routine maintenance." if maintenance_flag
         else f"Vehicle is ready for the next assignment."
     )
 
@@ -381,20 +415,27 @@ def generate_delivery_summary(req: DeliverySummaryRequest) -> dict:
             "delay_variance_mins": delay_variance,
             "efficiency_rating": efficiency_rating,
             "performance_grade": grade,
+            "telemetry_quality": "VALID" if not has_telemetry_issue else "DEGRADED",
+            "telemetry_anomalies": telemetry_anomalies if has_telemetry_issue else None,
             "summary": fallback_summary,
             "key_insights": fallback_insights,
             "maintenance_flag": maintenance_flag,
-            "maintenance_reason": "Heuristic: high risk or low efficiency" if maintenance_flag else None,
+            "maintenance_reason": ("Telemetry system failure - check sensors and vehicle diagnostics." if has_telemetry_issue 
+                                  else "Heuristic: high risk or low efficiency" if maintenance_flag else None),
             "next_shipment_recommendation": fallback_recommendation,
             "ai_generated": False,
         }
 
     try:
+        telemetry_status = "⚠️ DEGRADED - " + "; ".join(telemetry_anomalies) if has_telemetry_issue else "✅ VALID"
+        
         prompt = f"""
 SYSTEM ROLE: Senior Logistics Performance Analyst
 
 You have just completed delivery analysis for a shipment. 
 Generate a concise, professional post-delivery intelligence report in JSON.
+
+⚠️ DATA QUALITY NOTICE: Telemetry Status = {telemetry_status}
 
 DELIVERY TELEMETRY:
 - Shipment ID: {req.shipment_id}
@@ -411,10 +452,14 @@ DELIVERY TELEMETRY:
 - Pre-computed Efficiency: {efficiency_rating:.2f} | Grade: {grade}
 - Maintenance Flag: {maintenance_flag}
 
+IMPORTANT: If telemetry is degraded (0 distance, 0 speed, etc.), acknowledge this in your analysis.
+Do NOT extrapolate performance metrics from incomplete data.
+Focus on timing-based assessment when telemetry is invalid.
+
 TASK:
 1. Write a 2–3 sentence professional SUMMARY of this delivery's performance.
 2. List exactly 4 KEY INSIGHTS as short bullets (under 12 words each).
-3. Assess if MAINTENANCE is needed and why (max 1 sentence).
+3. Assess if MAINTENANCE is needed and why (max 1 sentence). Include telematics check if applicable.
 4. Write a NEXT_SHIPMENT_RECOMMENDATION (max 1 sentence).
 
 OUTPUT SCHEMA (JSON ONLY, NO EXTRA TEXT):
@@ -440,6 +485,8 @@ OUTPUT SCHEMA (JSON ONLY, NO EXTRA TEXT):
                 "delay_variance_mins": delay_variance,
                 "efficiency_rating": efficiency_rating,
                 "performance_grade": grade,
+                "telemetry_quality": "VALID" if not has_telemetry_issue else "DEGRADED",
+                "telemetry_anomalies": telemetry_anomalies if has_telemetry_issue else None,
                 "summary": ai_data.get("summary") or fallback_summary,
                 "key_insights": ai_data.get("key_insights") or fallback_insights,
                 "maintenance_flag": maintenance_flag,
@@ -458,10 +505,13 @@ OUTPUT SCHEMA (JSON ONLY, NO EXTRA TEXT):
         "delay_variance_mins": delay_variance,
         "efficiency_rating": efficiency_rating,
         "performance_grade": grade,
+        "telemetry_quality": "VALID" if not has_telemetry_issue else "DEGRADED",
+        "telemetry_anomalies": telemetry_anomalies if has_telemetry_issue else None,
         "summary": fallback_summary,
         "key_insights": fallback_insights,
         "maintenance_flag": maintenance_flag,
-        "maintenance_reason": "Heuristic: high risk or low efficiency" if maintenance_flag else None,
+        "maintenance_reason": ("Telemetry system failure - check sensors and vehicle diagnostics." if has_telemetry_issue 
+                              else "Heuristic: high risk or low efficiency" if maintenance_flag else None),
         "next_shipment_recommendation": fallback_recommendation,
         "ai_generated": False,
     }
