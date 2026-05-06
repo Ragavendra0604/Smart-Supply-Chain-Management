@@ -209,20 +209,41 @@ class ApiService {
     String priority = 'NORMAL',
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/create-shipment');
-    final response = await _client.post(
-      uri,
-      headers: await _getHeaders(),
-      body: jsonEncode({
-        'shipment_id': shipmentId,
-        'origin': origin,
-        'destination': destination,
-        'mode': mode,
-        'priority': priority,
-      }),
-    );
+    print('[API] POST /create-shipment - Payload: {shipment_id: $shipmentId, origin: $origin, destination: $destination, mode: $mode}');
+    
+    try {
+      final response = await _client.post(
+        uri,
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'shipment_id': shipmentId,
+          'origin': origin,
+          'destination': destination,
+          'mode': mode,
+          'priority': priority,
+        }),
+      );
 
-    if (response.statusCode >= 400) {
-      throw Exception('Failed to create shipment');
+      print('[API] POST /create-shipment - Status: ${response.statusCode}');
+      print('[API] POST /create-shipment - Response: ${response.body}');
+
+      if (response.statusCode >= 400) {
+        // Parse error response
+        try {
+          final errorData = jsonDecode(response.body);
+          final errorMsg = errorData['error'] ?? errorData['details'] ?? 'Failed to create shipment';
+          final errors = errorData['errors'] as List?;
+          if (errors != null && errors.isNotEmpty) {
+            throw Exception('${errors.first}');
+          }
+          throw Exception(errorMsg);
+        } catch (e) {
+          throw Exception('Failed to create shipment (Status ${response.statusCode}): ${response.body}');
+        }
+      }
+    } catch (e) {
+      print('[API] POST /create-shipment - Error: $e');
+      rethrow;
     }
   }
 

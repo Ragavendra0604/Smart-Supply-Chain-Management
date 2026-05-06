@@ -240,51 +240,75 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
     const validation = validateCreateShipment(req.body);
 
     if (!validation.valid) {
+      console.error('[CREATE-SHIPMENT] Validation failed:', validation.errors);
       return res.status(400).json({ success: false, errors: validation.errors });
     }
 
     const { shipment_id, origin, destination, mode, priority } = validation.value;
+    console.log(`[CREATE-SHIPMENT] Creating shipment: ${shipment_id} | ${origin} → ${destination} (${mode})`);
 
     // 1. PERSISTENCE LAYER: Initialize skeleton record with mode and priority
-    await db().collection('shipments').doc(shipment_id).set({
-      shipment_id,
-      origin,
-      destination,
-      vehicle_type: mode,
-      current_location: null,
-      status: 'CREATED',
-      priority: priority,
-      cargo_type: 'General',
-      fuel_level: 100,
-      vehicle_health: 'GOOD',
-      created_at: new Date(),
-      updated_at: new Date()
-    });
+    try {
+      await db().collection('shipments').doc(shipment_id).set({
+        shipment_id,
+        origin,
+        destination,
+        vehicle_type: mode,
+        current_location: null,
+        status: 'CREATED',
+        priority: priority,
+        cargo_type: 'General',
+        fuel_level: 100,
+        vehicle_health: 'GOOD',
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+      console.log(`[CREATE-SHIPMENT] Firestore persistence successful for ${shipment_id}`);
+    } catch (firestoreErr) {
+      console.error(`[CREATE-SHIPMENT] Firestore write failed: ${firestoreErr.message}`, firestoreErr);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to create shipment in database',
+        details: firestoreErr.message 
+      });
+    }
 
     // 2. INTELLIGENT INITIALIZATION PIPELINE (Synchronous for UX, parallel for speed)
     let analysisResult = null;
     try {
       analysisResult = await shipmentController.performAnalysis(shipment_id, req.traceId);
+      console.log(`[CREATE-SHIPMENT] Sync analysis completed for ${shipment_id}`);
 
       // If the sync call returned a fallback (success: false), trigger async repair
       if (analysisResult && !analysisResult.success) {
         console.warn(`[PIPELINE] Sync analysis for ${shipment_id} returned fallback. Triggering async repair...`);
-        shipmentController.runAsyncAnalysis(shipment_id, req.traceId);
+        shipmentController.runAsyncAnalysis(shipment_id, req.traceId).catch(asyncErr => {
+          console.error(`[PIPELINE] Async repair failed for ${shipment_id}: ${asyncErr.message}`);
+        });
       }
     } catch (analysisErr) {
-      console.error(`⚠️ Synchronous analysis failed for ${shipment_id}: ${analysisErr.message}`);
+      console.error(`⚠️ Synchronous analysis failed for ${shipment_id}: ${analysisErr.message}`, analysisErr);
       // Emergency fallback: trigger async analysis if sync throws
-      shipmentController.runAsyncAnalysis(shipment_id, req.traceId);
+      shipmentController.runAsyncAnalysis(shipment_id, req.traceId).catch(asyncErr => {
+        console.error(`[PIPELINE] Async repair failed for ${shipment_id}: ${asyncErr.message}`);
+      });
+      // Still return success to frontend, analysis will complete in background
     }
 
     res.json({
       success: true,
       shipment_id,
-      analysis: analysisResult
+      analysis: analysisResult,
+      message: 'Shipment created successfully. Analysis ' + (analysisResult ? 'completed.' : 'in progress.')
     });
 
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[CREATE-SHIPMENT] Unexpected error:', err.message, err);
+    res.status(500).json({ 
+      success: false,
+      error: err.message,
+      details: 'An unexpected error occurred during shipment creation'
+    });
   }
 });
 
