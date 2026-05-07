@@ -377,17 +377,20 @@ class ShipmentOptimizationValue {
     required this.time,
     required this.cost,
     required this.fuel,
+    this.riskLevel = 'STANDARD',
   });
 
   final String time;
   final num cost;
   final num fuel;
+  final String riskLevel;
 
   factory ShipmentOptimizationValue.fromMap(Map<String, dynamic> data) {
     return ShipmentOptimizationValue(
       time: stringValue(data['time'], fallback: '--'),
       cost: numValue(data['cost']),
       fuel: numValue(data['fuel']),
+      riskLevel: stringValue(data['risk_level'], fallback: 'STANDARD'),
     );
   }
 }

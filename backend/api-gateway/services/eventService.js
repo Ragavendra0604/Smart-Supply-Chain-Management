@@ -1,8 +1,12 @@
-import { PubSub } from '@google-cloud/pubsub';
-import { BigQuery } from '@google-cloud/bigquery';
+let pubsub;
+let bigquery;
 
-const pubsub = new PubSub();
-const bigquery = new BigQuery();
+try {
+  pubsub = new PubSub();
+  bigquery = new BigQuery();
+} catch (e) {
+  console.error('[EVENT SERVICE] Cloud SDK Initialization Failed:', e.message);
+}
 
 const TOPIC_NAME = process.env.PUBSUB_TOPIC || 'logistics-events';
 const BQ_DATASET = 'logistics_analytics';
@@ -21,7 +25,7 @@ class EventManager {
     process.on('SIGTERM', async () => {
       console.log('[SYSTEM] SIGTERM received. Draining BigQuery buffer...');
       await this.flushBigQuery();
-      process.exit(0);
+      // No process.exit(0) here, let Cloud Run handle it after draining
     });
   }
 
@@ -29,6 +33,11 @@ class EventManager {
    * Publish asynchronous event to Google Cloud Pub/Sub
    */
   async publishEvent(eventType, data) {
+    if (!pubsub) {
+      console.warn(`[PUBSUB SKIP] Service not initialized for ${eventType}`);
+      return;
+    }
+
     const payload = { eventType, data, timestamp: new Date().toISOString() };
     const dataBuffer = Buffer.from(JSON.stringify(payload));
 
@@ -36,7 +45,7 @@ class EventManager {
       await pubsub.topic(TOPIC_NAME).publishMessage({
         data: dataBuffer,
         attributes: { eventType },
-        orderingKey: data.shipment_id || 'default'
+        orderingKey: (data.shipment_id || 'default').toString()
       });
     } catch (err) {
       console.error(`[PUBSUB ERROR] Failed to publish event: ${err.message}`);
@@ -47,24 +56,30 @@ class EventManager {
    * Stream analytics to BigQuery (OLAP) with Batching to reduce costs
    */
   async logToBigQuery(shipmentId, eventType, details = {}) {
-    const row = {
-      shipment_id: shipmentId,
-      event_type: eventType,
-      details: JSON.stringify(details),
-      timestamp: bigquery.datetime(new Date().toISOString().replace('Z', ''))
-    };
+    if (!bigquery) return;
 
-    bqBuffer.push(row);
+    try {
+      const row = {
+        shipment_id: shipmentId,
+        event_type: eventType,
+        details: JSON.stringify(details),
+        timestamp: bigquery.datetime(new Date().toISOString().replace('Z', ''))
+      };
 
-    if (bqBuffer.length >= BQ_BATCH_SIZE) {
-      await this.flushBigQuery();
-    } else if (!bqTimer) {
-      bqTimer = setTimeout(() => this.flushBigQuery(), BQ_BATCH_TIMEOUT);
+      bqBuffer.push(row);
+
+      if (bqBuffer.length >= BQ_BATCH_SIZE) {
+        await this.flushBigQuery();
+      } else if (!bqTimer) {
+        bqTimer = setTimeout(() => this.flushBigQuery(), BQ_BATCH_TIMEOUT);
+      }
+    } catch (e) {
+      console.error('[BIGQUERY BUFFER ERROR]', e.message);
     }
   }
 
   async flushBigQuery() {
-    if (bqBuffer.length === 0 || flushInProgress) return;
+    if (!bigquery || bqBuffer.length === 0 || flushInProgress) return;
 
     flushInProgress = true;
     const rowsToInsert = [...bqBuffer];

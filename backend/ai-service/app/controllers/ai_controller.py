@@ -169,16 +169,20 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
         }
     
     # --- DETERMINISTIC METRICS (Heuristic Source of Truth) ---
+    # We compare the default (first) route with the recommended (best) route
+    # Both use their live travel_time_min for a fair comparison.
     optimization_data = {
         "before": {
-            "time": f"{int(current['raw_duration_min'] // 60)}h {int(current['raw_duration_min'] % 60)}m",
+            "time": f"{int(current['travel_time_min'] // 60)}h {int(current['travel_time_min'] % 60)}m",
             "cost": float(current['total_cost']),
-            "fuel": float(current['total_fuel'])
+            "fuel": float(current['total_fuel']),
+            "risk_level": current['risk_level']
         },
         "after": {
             "time": f"{int(best['travel_time_min'] // 60)}h {int(best['travel_time_min'] % 60)}m",
             "cost": float(best['total_cost']),
-            "fuel": float(best['total_fuel'])
+            "fuel": float(best['total_fuel']),
+            "risk_level": best['risk_level']
         }
     }
 

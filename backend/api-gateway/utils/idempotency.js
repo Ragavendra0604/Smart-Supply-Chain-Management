@@ -18,8 +18,8 @@ export const processIdempotentRequest = async (idempotencyKey, processorFn) => {
       return doc.data().result; // Return previous successful response
     }
 
-    // Process the actual business logic
-    const result = await processorFn();
+    // Process the actual business logic - passing transaction object for atomicity
+    const result = await processorFn(t);
 
     // Store the result with a TTL (requires Firestore TTL policy on 'expiresAt')
     const expiresAt = new Date();

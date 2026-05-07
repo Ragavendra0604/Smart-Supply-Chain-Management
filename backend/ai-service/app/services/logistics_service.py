@@ -72,6 +72,8 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         heuristic_prediction = max(0.0, heuristic_prediction)
         
         # 4. Enforce ML inference parity
+        # ML Model is currently disabled (not fully ready) - Prioritizing Gemini AI strategic reasoning
+        """
         if ml_model is not None:
             try:
                 # CRITICAL FIX: Map features to match RandomForestRegressor training schema
@@ -120,6 +122,7 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
             except Exception as ml_err:
                 logger.error(f"ML Model Parity Error (Mapping/Order): {ml_err}. Falling back to deterministic heuristic.")
                 return round(heuristic_prediction, 2)
+        """
 
         return round(heuristic_prediction, 2)
     except Exception as e:
@@ -299,6 +302,10 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             - Route Summary: {json.dumps([{"summary": r.get("summary"), "distance": r.get("distance_km"), "duration": r.get("travel_time_min")} for r in (data.routeData if isinstance(data.routeData, list) else [])]) if data.routeData else "[]"}
             - Weather: {weather_condition}
             - News/Disruptions: {json.dumps([{"title": n.get("title")} for n in (data.newsData if data.newsData else [])]) if data.newsData else "[]"}
+            
+            HEURISTIC ENGINE OUTPUT (GROUND TRUTH):
+            - Calculated Risk Score: {risk_score}
+            - Predicted Delay: {predicted_delay}
 
             STRICT REQUIREMENTS:
             1. Return ONLY valid JSON. No explanations, no extra text.
@@ -311,6 +318,7 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             - GO -> risk < 0.3
             - HOLD -> risk 0.3–0.6
             - REROUTE -> risk > 0.6 or major bottlenecks
+            - IMPORTANT: If Heuristic Risk is > 0.6, the decision MUST NOT be "GO".
 
             OUTPUT SCHEMA (STRICT JSON ONLY):
             {{

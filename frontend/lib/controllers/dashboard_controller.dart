@@ -52,6 +52,7 @@ class DashboardController extends ChangeNotifier {
   StreamSubscription<bool>? _globalStopSubscription;
   String? _lastHighRiskToken;
   int _simulationIndex = 0;
+  bool _isSendingLocation = false;
 
   Future<void> bootstrap() async {
     isBootstrapping = true;
@@ -319,6 +320,7 @@ class DashboardController extends ChangeNotifier {
               condition: weatherCondition,
             ),
           );
+          _syncShipmentSummary(latestShipment!);
         }
       }
 
@@ -638,6 +640,9 @@ class DashboardController extends ChangeNotifier {
     }
     notifyListeners();
 
+    if (_isSendingLocation) return;
+    _isSendingLocation = true;
+
     try {
       await _locationService.sendVehicleLocation(
         shipmentId: targetId,
@@ -664,6 +669,8 @@ class DashboardController extends ChangeNotifier {
       }
     } catch (_) {
       errorMessage = 'Simulation update failed.';
+    } finally {
+      _isSendingLocation = false;
     }
   }
 

@@ -28,27 +28,29 @@ import deliveryController from './controllers/deliveryController.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
+// --- PRODUCTION CLOUD RUN SETTINGS ---
+// Trust proxy is required to get the real client IP for rate limiting behind load balancers
+app.set('trust proxy', 1);
+
 // --- CENTRALIZED LOGGING UTILITY ---
-const logDir = path.join(__dirname, '../../logs');
-let gatewayLogStream = null;
-
-try {
-  if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-  gatewayLogStream = createWriteStream(path.join(logDir, 'gateway.log'), { flags: 'a' });
-} catch (err) {
-  console.log('⚠️ Local log file creation failed (expected in Cloud Run). Streaming to stdout only.');
-}
-
+// SRE BEST PRACTICE: Use stdout/stderr for container logging (auto-captured by Cloud Logging)
 const sysLog = (service, level, message, data = {}) => {
   const timestamp = new Date().toISOString();
-  const entry = JSON.stringify({ timestamp, service, level, message, ...data });
-
-  if (gatewayLogStream) {
-    gatewayLogStream.write(entry + '\n');
-  }
+  const entry = JSON.stringify({ 
+    timestamp, 
+    service, 
+    level, 
+    message, 
+    ...data,
+    severity: level === 'ERROR' ? 'ERROR' : (level === 'WARN' ? 'WARNING' : 'INFO')
+  });
 
   // Standard output is automatically captured by GCP Cloud Logging
-  console.log(entry);
+  if (level === 'ERROR') {
+    console.error(entry);
+  } else {
+    console.log(entry);
+  }
 };
 
 // Request Logging Middleware with Trace ID
@@ -364,13 +366,15 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       }
     }
 
-    const result = await processIdempotentRequest(idempotencyKey, async () => {
+    const result = await processIdempotentRequest(idempotencyKey, async (t) => {
       if (shouldUpdateFirestore) {
         // SHARDING: Partition shipments across sub-collections if volume is extreme
         const shardId = shipment_id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % 10;
 
         const shipmentRef = db().collection('shipments').doc(shipment_id);
-        await shipmentRef.update({
+        
+        // PRODUCTION-GRADE: Use the transaction 't' for atomic updates
+        t.update(shipmentRef, {
           current_location: { lat, lng },
           speed_kmh,
           current_step_index,
@@ -384,6 +388,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       }
 
       if (trigger_ai) {
+        // Await the event publishing to ensure AI analysis is triggered reliably
         await eventManager.publishEvent('shipment.location_updated', {
           shipment_id, lat, lng, traceId: req.traceId
         });

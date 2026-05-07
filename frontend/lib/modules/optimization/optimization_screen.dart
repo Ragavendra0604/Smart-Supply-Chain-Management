@@ -388,7 +388,7 @@ class _ComparisonSection extends StatelessWidget {
         const SizedBox(height: 12),
         _MetricRow(
           label: 'Risk Exposure',
-          before: 'STANDARD',
+          before: opt.before.riskLevel,
           after: shipment.ai.riskLevel,
           icon: Icons.security_outlined,
           savingLabel: shipment.ai.riskLevel == 'LOW' ? 'SAFE' : 'MONITOR',
