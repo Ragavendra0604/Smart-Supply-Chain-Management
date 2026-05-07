@@ -1,3 +1,6 @@
+import { PubSub } from '@google-cloud/pubsub';
+import { BigQuery } from '@google-cloud/bigquery';
+
 let pubsub;
 let bigquery;
 
@@ -71,7 +74,12 @@ class EventManager {
       if (bqBuffer.length >= BQ_BATCH_SIZE) {
         await this.flushBigQuery();
       } else if (!bqTimer) {
-        bqTimer = setTimeout(() => this.flushBigQuery(), BQ_BATCH_TIMEOUT);
+        // PRODUCTION SRE: Wrap background timer in a catchable wrapper to avoid unhandled rejections
+        bqTimer = setTimeout(() => {
+          this.flushBigQuery().catch(err => {
+            console.error('[BIGQUERY BACKGROUND FLUSH ERROR]', err.message);
+          });
+        }, BQ_BATCH_TIMEOUT);
       }
     } catch (e) {
       console.error('[BIGQUERY BUFFER ERROR]', e.message);
@@ -84,7 +92,7 @@ class EventManager {
     flushInProgress = true;
     const rowsToInsert = [...bqBuffer];
     bqBuffer = [];
-    
+
     if (bqTimer) {
       clearTimeout(bqTimer);
       bqTimer = null;
@@ -95,7 +103,7 @@ class EventManager {
       console.log(`[BIGQUERY] Flushed ${rowsToInsert.length} rows to analytics.`);
     } catch (err) {
       console.error(`[BIGQUERY ERROR] Batch insert failed:`, JSON.stringify(err.errors || err));
-      
+
       // PRODUCTION SRE: Filter out "poison pill" rows that failed repeatedly
       const retryableRows = rowsToInsert
         .map(row => ({ ...row, retry_count: (row.retry_count || 0) + 1 }))
