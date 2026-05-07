@@ -234,6 +234,11 @@ app.get('/api/shipments/:shipment_id', authMiddleware, async (req, res) => {
 /* ---------------- CREATE SHIPMENT (PROTECTED) ---------------- */
 app.post('/create-shipment', authMiddleware, async (req, res) => {
   try {
+    const idempotencyKey = req.headers['x-idempotency-key'];
+    if (!idempotencyKey) {
+      return res.status(400).json({ success: false, error: 'x-idempotency-key header required' });
+    }
+
     const validation = validateCreateShipment(req.body);
 
     if (!validation.valid) {
@@ -242,10 +247,11 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
     }
 
     const { shipment_id, origin, destination, mode, priority } = validation.value;
-    console.log(`[CREATE-SHIPMENT] Creating shipment: ${shipment_id} | ${origin} → ${destination} (${mode})`);
 
-    // 1. PERSISTENCE LAYER: Initialize skeleton record with mode and priority
-    try {
+    const result = await processIdempotentRequest(idempotencyKey, async () => {
+      console.log(`[CREATE-SHIPMENT] Creating shipment: ${shipment_id} | ${origin} → ${destination} (${mode})`);
+
+      // 1. PERSISTENCE LAYER: Initialize skeleton record
       await db().collection('shipments').doc(shipment_id).set({
         shipment_id,
         origin,
@@ -260,44 +266,21 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
         created_at: new Date(),
         updated_at: new Date()
       });
-      console.log(`[CREATE-SHIPMENT] Firestore persistence successful for ${shipment_id}`);
-    } catch (firestoreErr) {
-      console.error(`[CREATE-SHIPMENT] Firestore write failed: ${firestoreErr.message}`, firestoreErr);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to create shipment in database',
-        details: firestoreErr.message
+
+      // 2. INTELLIGENT INITIALIZATION PIPELINE (Asynchronous to avoid client timeouts)
+      // We trigger the analysis but DO NOT await it in the main request flow.
+      shipmentController.runAsyncAnalysis(shipment_id, req.traceId).catch(err => {
+        console.error(`[PIPELINE ERROR] Background analysis failed for ${shipment_id}:`, err.message);
       });
-    }
 
-    // 2. INTELLIGENT INITIALIZATION PIPELINE (Synchronous for UX, parallel for speed)
-    let analysisResult = null;
-    try {
-      analysisResult = await shipmentController.performAnalysis(shipment_id, req.traceId);
-      console.log(`[CREATE-SHIPMENT] Sync analysis completed for ${shipment_id}`);
-
-      // If the sync call returned a fallback (success: false), trigger async repair
-      if (analysisResult && !analysisResult.success) {
-        console.warn(`[PIPELINE] Sync analysis for ${shipment_id} returned fallback. Triggering async repair...`);
-        shipmentController.runAsyncAnalysis(shipment_id, req.traceId).catch(asyncErr => {
-          console.error(`[PIPELINE] Async repair failed for ${shipment_id}: ${asyncErr.message}`);
-        });
-      }
-    } catch (analysisErr) {
-      console.error(`⚠️ Synchronous analysis failed for ${shipment_id}: ${analysisErr.message}`, analysisErr);
-      // Emergency fallback: trigger async analysis if sync throws
-      shipmentController.runAsyncAnalysis(shipment_id, req.traceId).catch(asyncErr => {
-        console.error(`[PIPELINE] Async repair failed for ${shipment_id}: ${asyncErr.message}`);
-      });
-      // Still return success to frontend, analysis will complete in background
-    }
-
-    res.json({
-      success: true,
-      shipment_id,
-      analysis: analysisResult,
-      message: 'Shipment created successfully. Analysis ' + (analysisResult ? 'completed.' : 'in progress.')
+      return {
+        success: true,
+        shipment_id,
+        message: 'Shipment created successfully. Analysis started in background.'
+      };
     });
+
+    res.status(201).json(result);
 
   } catch (err) {
     console.error('[CREATE-SHIPMENT] Unexpected error:', err.message, err);
