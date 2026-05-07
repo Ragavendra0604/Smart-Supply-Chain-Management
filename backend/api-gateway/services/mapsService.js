@@ -30,7 +30,7 @@ const getRoute = async (origin, destination) => {
         alternatives: true
       },
       headers: {
-        'Referer': process.env.GOOGLE_MAPS_REFERER || 'https://smartsupplychain-3b036.web.app'
+        'Referer': process.env.GOOGLE_MAPS_REFERER || 'https://ssm-sb.firebaseapp.com',
       }
     });
 
@@ -45,7 +45,7 @@ const getRoute = async (origin, destination) => {
 
     const results = response.data.routes.map((route, index) => {
       const leg = route.legs[0];
-      
+
       // 1. EXTRACT LANDMARKS FROM STEPS
       const landmarks = leg.steps.map(step => {
         const cleanName = step.html_instructions.replace(/<[^>]*>?/gm, '');
@@ -61,7 +61,7 @@ const getRoute = async (origin, destination) => {
         lat,
         lng
       }));
-      
+
       // Ensure the exact start and end coordinates are included
       if (fullPath.length > 0) {
         fullPath[0] = { lat: leg.start_location.lat, lng: leg.start_location.lng };
@@ -87,7 +87,7 @@ const getRoute = async (origin, destination) => {
     return results;
   } catch (error) {
     console.error(`[MAPS SERVICE ERROR] Critical API Failure: ${error.message}.`);
-    
+
     // Attempt to extract coordinates from strings for a minimal fallback path
     const extractCoords = (str) => {
       const parts = str.split(',').map(p => parseFloat(p.trim()));
@@ -102,7 +102,7 @@ const getRoute = async (origin, destination) => {
       route_id: `route_fallback`,
       summary: "Direct Path (API Fallback)",
       distance: "Calculating...",
-      distance_meters: 0, 
+      distance_meters: 0,
       duration: "Calculating...",
       duration_seconds: 0,
       traffic_duration: "Calculating...",

@@ -28,7 +28,7 @@ const getRoutePath = async () => {
           departure_time: 'now'
         },
         headers: {
-          'Referer': process.env.GOOGLE_MAPS_REFERER || 'https://smartsupplychain-3b036.web.app'
+          'Referer': process.env.GOOGLE_MAPS_REFERER || 'https://ssm-sb.firebaseapp.com',
         }
       }
     );
