@@ -358,11 +358,34 @@ def handle_predict(data: InputData):
         return final_response
     except Exception as e:
         logger.error(f"Prediction Error: {str(e)}")
-        return {
-            "success": True, "risk_score": 0.0, "risk_level": "LOW",
-            "delay_prediction": "0 mins", "suggestion": "Proceed normally",
-            "insight": "AI temporarily unavailable.", "all_routes": []
-        }
+        
+        # CRITICAL FIX: Don't mask errors as success. Return proper error response.
+        # Only catch predictable failures (missing data, bad input).
+        # Unexpected errors should propagate as 500 errors.
+        error_msg = str(e)
+        
+        # Classify error type
+        is_bad_request = any([
+            "shipment not found" in error_msg.lower(),
+            "invalid input" in error_msg.lower(),
+            "missing required" in error_msg.lower(),
+        ])
+        
+        if is_bad_request:
+            # Return 400-level response for bad requests
+            return {
+                "success": False,
+                "error": error_msg,
+                "risk_score": 0.0,
+                "risk_level": "UNKNOWN",
+                "delay_prediction": "N/A",
+                "suggestion": "Unable to generate prediction",
+                "insight": f"Prediction failed: {error_msg}",
+                "all_routes": []
+            }
+        else:
+            # Return proper 500 error for unexpected exceptions
+            raise
 
 
 async def handle_delivery_summary(request: Request):

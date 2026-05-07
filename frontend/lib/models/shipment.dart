@@ -97,15 +97,26 @@ class Shipment {
   }
 
   int get currentRouteIndex {
+    // CRITICAL FIX: Null-safe route index calculation
     if (currentLocation == null || route.path.isEmpty) return 0;
 
     var bestIndex = 0;
     var bestDistance = double.infinity;
 
+    final curLat = currentLocation!.latitude;
+    final curLng = currentLocation!.longitude;
+
+    // Guard against invalid coordinates (0, 0)
+    if (curLat == 0.0 && curLng == 0.0) return 0;
+
     for (var i = 0; i < route.path.length; i++) {
       final point = route.path[i];
-      final distance = (point.latitude - currentLocation!.latitude).abs() +
-          (point.longitude - currentLocation!.longitude).abs();
+      
+      // Skip invalid route points
+      if (point.latitude == 0.0 && point.longitude == 0.0) continue;
+      
+      final distance = (point.latitude - curLat).abs() +
+          (point.longitude - curLng).abs();
 
       if (distance < bestDistance) {
         bestDistance = distance;

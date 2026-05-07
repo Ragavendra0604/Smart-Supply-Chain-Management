@@ -39,7 +39,7 @@ const getPrediction = async (data, traceId = null) => {
       method: 'POST',
       data,
       headers,
-      timeout: 35000, 
+      timeout: 35000,
       retryConfig: {
         retry: 4,
         retryDelay: 1500,
@@ -61,13 +61,13 @@ const getPrediction = async (data, traceId = null) => {
     const status = error.response?.status;
     const isTimeout = error.code === 'ECONNABORTED' || error.message.includes('timeout');
     const message = error.response?.data?.error || error.message;
-    
+
     console.error(`[AI ERROR] ${status || 'NET_ERR'}: ${message}`);
 
     // Intelligence fallback: Classify the error for the operator
     const errorType = status === 403 ? 'Authentication' : (isTimeout ? 'Latency' : 'Connectivity');
     const suggestion = `AI Analysis pending (${errorType} issue)`;
-    const insight = isTimeout 
+    const insight = isTimeout
       ? "AI Service is experiencing high latency (Cold Start). Background optimization is still running."
       : `System experienced a ${errorType.toLowerCase()} issue with the AI Service (Error ${status || 'Network'}).`;
 
@@ -82,4 +82,4 @@ const getPrediction = async (data, traceId = null) => {
   }
 };
 
-export default { getPrediction };
+export default { getPrediction };

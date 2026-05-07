@@ -7,7 +7,6 @@ import fs from 'fs';
 import { createWriteStream } from 'fs';
 
 import { db, initializeFirebase } from './config/firebase.js';
-import shipmentRoutes from './routes/shipmentRoutes.js';
 import simulatorController from './controllers/simulatorController.js';
 import { corsOptions, rateLimiter, securityHeaders } from './utils/security.js';
 import { serializeFirestoreData } from './utils/firestoreSerializer.js';
@@ -86,9 +85,7 @@ app.post('/api/logs', authMiddleware, (req, res) => {
 
 
 /* -----------------------------------------------------------------------
-   NOTE: shipmentRoutes (POST /analyze) is mounted BELOW all inline routes
-   to prevent the router from shadowing GET /api/shipments.
-   See bottom of file for mount.
+   NOTE: All shipment routes are now inline with authMiddleware.
 ----------------------------------------------------------------------- */
 
 /* ---------------- HEALTH ---------------- */
@@ -266,10 +263,10 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
       console.log(`[CREATE-SHIPMENT] Firestore persistence successful for ${shipment_id}`);
     } catch (firestoreErr) {
       console.error(`[CREATE-SHIPMENT] Firestore write failed: ${firestoreErr.message}`, firestoreErr);
-      return res.status(500).json({ 
-        success: false, 
+      return res.status(500).json({
+        success: false,
         error: 'Failed to create shipment in database',
-        details: firestoreErr.message 
+        details: firestoreErr.message
       });
     }
 
@@ -304,7 +301,7 @@ app.post('/create-shipment', authMiddleware, async (req, res) => {
 
   } catch (err) {
     console.error('[CREATE-SHIPMENT] Unexpected error:', err.message, err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       error: err.message,
       details: 'An unexpected error occurred during shipment creation'
@@ -430,6 +427,7 @@ app.post('/apply-route', authMiddleware, shipmentController.applyRoute);
 app.post('/simulate-scenario', authMiddleware, shipmentController.simulateShipment);
 
 // Standard Frontend Routes (ApiService.dart)
+app.post('/api/shipments/analyze', authMiddleware, shipmentController.analyzeShipment);
 app.post('/api/shipments/simulate', authMiddleware, shipmentController.simulateShipment);
 app.post('/inject-simulation', authMiddleware, shipmentController.injectSimulation);
 app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, shipmentController.applyRoute);
@@ -438,12 +436,12 @@ app.patch('/api/shipments/:shipment_id/apply-route', authMiddleware, shipmentCon
 app.post('/api/shipments/:shipment_id/complete', authMiddleware, deliveryController.completeDelivery);
 
 /* ---------------- SIMULATOR CONTROLS ---------------- */
-app.post('/api/simulator/start', simulatorController.startSimulator);
-app.post('/api/simulator/stop', simulatorController.stopSimulator);
+app.post('/api/simulator/start', authMiddleware, simulatorController.startSimulator);
+app.post('/api/simulator/stop', authMiddleware, simulatorController.stopSimulator);
 
 /* ---------------- SYSTEM CONTROLS ---------------- */
 import systemController from './controllers/systemController.js';
-app.get('/api/system/status', systemController.getSystemStatus);
+app.get('/api/system/status', authMiddleware, systemController.getSystemStatus);
 app.post('/api/system/toggle-stop', authMiddleware, systemController.toggleGlobalStop);
 
 const PORT = process.env.PORT || 5000;
@@ -468,11 +466,6 @@ const startApp = async () => {
       console.error('❌ Firebase initialization failed:', firebaseError.message);
       throw firebaseError;
     }
-
-    /* Mounted here (before listen): POST /api/shipments/analyze
-       Must be registered before server starts to avoid missing routes on cold start.
-       Inline GET /api/shipments route above takes priority because it's defined first. */
-    app.use('/api/shipments', shipmentRoutes);
 
     app.listen(PORT, async () => {
       console.log(`🚀 API Gateway running on port ${PORT}`);

@@ -42,7 +42,7 @@ export const completeDelivery = async (req, res) => {
     }
 
     // 2. Extract telemetry from stored Firestore fields
-    const routeData  = Array.isArray(data.routeData) ? data.routeData[0] : (data.routeData || {});
+    const routeData = Array.isArray(data.routeData) ? data.routeData[0] : (data.routeData || {});
     const aiResponse = data.aiResponse || {};
 
     // --- ROBUST DISTANCE EXTRACTION ---
@@ -70,11 +70,18 @@ export const completeDelivery = async (req, res) => {
     distanceKm = parseFloat(distanceKm.toFixed(2));
 
     // --- OTHER TELEMETRY FIELDS ---
-    const plannedMin    = parseFloat(routeData.travel_time_min || (routeData.duration_seconds / 60) || 0);
-    const totalCost     = parseFloat(routeData.total_cost || aiResponse.optimization_data?.after?.cost || 0);
-    const totalFuel     = parseFloat(routeData.total_fuel || aiResponse.optimization_data?.after?.fuel || 0);
-    const peakRiskScore = parseFloat(aiResponse.risk_score || 0);
-    const weather       = (data.weatherData || {}).condition || 'Clear';
+    // --- OTHER TELEMETRY FIELDS ---
+    const rawTravelTimeMin = routeData.travel_time_min;
+    const rawDurationSec   = routeData.duration_seconds;
+    const plannedMin = parseFloat(
+      rawTravelTimeMin != null ? rawTravelTimeMin
+      : rawDurationSec != null ? rawDurationSec / 60
+      : 0
+    );
+    const totalCost = parseFloat(routeData.total_cost ?? aiResponse.optimization_data?.after?.cost ?? 0);
+    const totalFuel = parseFloat(routeData.total_fuel ?? aiResponse.optimization_data?.after?.fuel ?? 0);
+    const peakRiskScore = parseFloat(aiResponse.risk_score ?? 0);
+    const weather = (data.weatherData || {}).condition || 'Clear';
     const newsDisruptions = (data.newsData || []).length;
 
     console.log(`[DELIVERY] ${shipment_id} telemetry: distanceKm=${distanceKm}, plannedMin=${plannedMin}, source=${routeData.source || 'stored'}`);
@@ -83,10 +90,28 @@ export const completeDelivery = async (req, res) => {
     // Actual duration: prefer simulation_started_at (stamped when sim begins)
     // Fallback to created_at. Cap at 24h to avoid outliers for long-idle shipments.
     const simStartedAt = data.simulation_started_at?.toDate?.() ?? null;
-    const createdAt    = data.created_at?.toDate?.() ?? new Date();
-    const startRef     = simStartedAt ?? createdAt;
-    const elapsedMs    = Math.min(Date.now() - startRef.getTime(), 86400 * 1000);
-    const actualMin    = Math.max(1, Math.round(elapsedMs / 60000));
+    const createdAt = data.created_at?.toDate?.() ?? new Date();
+    const startRef = simStartedAt ?? createdAt;
+    const elapsedMs = Math.min(Date.now() - startRef.getTime(), 86400 * 1000);
+    let actualMin = Math.max(1, Math.round(elapsedMs / 60000));
+
+    // MVP FIX: Handle Simulator Fast-Forward
+    // If the simulation finished unrealistically fast (< 10% of planned time), calculate the "simulated" actual time.
+    if (elapsedMs < (plannedMin * 60000 * 0.1) && plannedMin > 0) {
+      const weatherCond = (data.weatherData || {}).condition?.toLowerCase() || '';
+      let envModifier = 1.0;
+      if (weatherCond.includes('rain') || weatherCond.includes('snow') || weatherCond.includes('storm')) {
+        envModifier *= 0.75;
+      }
+      if (aiResponse.risk_level === 'HIGH') {
+        envModifier *= 0.80;
+      }
+      const injectedModifier = data.simulation_speed_modifier || 1.0;
+      const totalModifier = envModifier * injectedModifier;
+      
+      // Calculate deterministic actual time without random variance
+      actualMin = Math.round(plannedMin / totalModifier);
+    }
 
     // Average speed estimation: distance / actual trip time
     const avgSpeedKmH = (distanceKm > 0 && actualMin > 0)
@@ -96,23 +121,23 @@ export const completeDelivery = async (req, res) => {
     // 3. Call AI Service for the delivery summary
     const summaryPayload = {
       shipment_id,
-      origin:              data.origin || 'Unknown',
-      destination:         data.destination || 'Unknown',
-      mode:                data.vehicle_type || data.mode || 'ROAD',
-      cargo_type:          data.cargo_type || 'General',
-      priority:            data.priority || 'Normal',
-      is_perishable:       data.is_perishable || false,
-      distance_km:         distanceKm,
+      origin: data.origin || 'Unknown',
+      destination: data.destination || 'Unknown',
+      mode: data.vehicle_type || data.mode || 'ROAD',
+      cargo_type: data.cargo_type || 'General',
+      priority: data.priority || 'Normal',
+      is_perishable: data.is_perishable || false,
+      distance_km: distanceKm,
       actual_duration_min: actualMin,
       planned_duration_min: plannedMin,
-      total_cost:          totalCost,
-      total_fuel:          totalFuel,
-      avg_speed_kmh:       avgSpeedKmH,
-      peak_risk_score:     peakRiskScore,
+      total_cost: totalCost,
+      total_fuel: totalFuel,
+      avg_speed_kmh: avgSpeedKmH,
+      peak_risk_score: peakRiskScore,
       weather_encountered: weather,
-      delays_mins:         Math.max(0, actualMin - plannedMin),
-      news_disruptions:    newsDisruptions,
-      model_name:          'gemini-2.5-flash',
+      delays_mins: Math.max(0, actualMin - plannedMin),
+      news_disruptions: newsDisruptions,
+      model_name: 'gemini-2.5-flash',
     };
 
     const aiBaseUrl = process.env.AI_SERVICE_URL || '';
@@ -142,8 +167,8 @@ export const completeDelivery = async (req, res) => {
 
     // Heuristic fallback if AI service is unavailable
     if (!deliverySummary) {
-      const delayVariance  = actualMin - plannedMin;
-      const onTime         = delayVariance <= 5;
+      const delayVariance = actualMin - plannedMin;
+      const onTime = delayVariance <= 5;
 
       // Telemetry validation (mirrors Python AI service logic)
       const hasTelemetryIssue = distanceKm === 0 || (avgSpeedKmH === 0 && actualMin > 0);
@@ -152,7 +177,7 @@ export const completeDelivery = async (req, res) => {
       if (hasTelemetryIssue) {
         // Can't trust distance/speed — grade purely on timing
         efficiency = onTime ? 0.95 : 0.5;
-        grade      = onTime ? 'A' : 'C';
+        grade = onTime ? 'A' : 'C';
       } else {
         efficiency = plannedMin > 0
           ? Math.max(0, Math.min(1, 1 - Math.abs(delayVariance) / plannedMin))
@@ -160,8 +185,9 @@ export const completeDelivery = async (req, res) => {
         grade = efficiency >= 0.90 ? 'A' : efficiency >= 0.75 ? 'B' : efficiency >= 0.55 ? 'C' : 'D';
       }
 
-      // Maintenance: only fire on genuine issues, NOT on telemetry gaps
-      const maintenanceFlag = !hasTelemetryIssue && (peakRiskScore >= 0.7 || efficiency < 0.55);
+      // Maintenance: decouple from route risk (peakRiskScore). Only fire on vehicle issues or severe anomalies.
+      const vehicleHealth = data.vehicle_health || 'GOOD';
+      const maintenanceFlag = !hasTelemetryIssue && (vehicleHealth !== 'GOOD' || efficiency < 0.40);
 
       deliverySummary = {
         success: true,
@@ -179,7 +205,7 @@ export const completeDelivery = async (req, res) => {
           `Peak risk: ${(peakRiskScore * 100).toFixed(0)}%`,
         ],
         maintenance_flag: maintenanceFlag,
-        maintenance_reason: maintenanceFlag ? 'High peak risk or low efficiency detected.' : null,
+        maintenance_reason: maintenanceFlag ? (vehicleHealth !== 'GOOD' ? `Vehicle health reported as ${vehicleHealth}.` : 'Abnormally low efficiency detected. Inspection advised.') : null,
         next_shipment_recommendation: maintenanceFlag
           ? 'Schedule vehicle inspection before next assignment.'
           : 'Vehicle is ready for immediate reassignment.',

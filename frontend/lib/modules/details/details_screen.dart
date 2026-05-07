@@ -28,15 +28,15 @@ class DetailsScreen extends StatelessWidget {
                     children: [
                       _DetailHeader(shipment: shipment),
                       const SizedBox(height: 20),
-                      Text('Risk Analysis', style: AppTheme.light.textTheme.titleLarge),
+                      Text('Risk Analysis', style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 12),
                       RiskCard(risk: shipment.riskLevel, label: shipment.ai.riskLevel),
                       const SizedBox(height: 20),
-                      Text('AI Insights', style: AppTheme.light.textTheme.titleLarge),
+                      Text('AI Insights', style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 12),
                       AiInsightCard(shipment: shipment),
                       const SizedBox(height: 20),
-                      Text('Logistics Metrics', style: AppTheme.light.textTheme.titleLarge),
+                      Text('Logistics Metrics', style: Theme.of(context).textTheme.titleLarge),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -46,8 +46,8 @@ class DetailsScreen extends StatelessWidget {
                                 children: [
                                   const Icon(Icons.timer_outlined, color: AppTheme.accent),
                                   const SizedBox(height: 8),
-                                  Text('Base ETA', style: AppTheme.light.textTheme.bodyMedium),
-                                  Text(shipment.route.duration, style: AppTheme.light.textTheme.titleLarge),
+                                  Text('Base ETA', style: Theme.of(context).textTheme.bodyMedium),
+                                  Text(shipment.route.duration, style: Theme.of(context).textTheme.titleLarge),
                                 ],
                               ),
                             ),
@@ -59,8 +59,8 @@ class DetailsScreen extends StatelessWidget {
                                 children: [
                                   const Icon(Icons.traffic_outlined, color: AppTheme.warning),
                                   const SizedBox(height: 8),
-                                  Text('Traffic ETA', style: AppTheme.light.textTheme.bodyMedium),
-                                  Text(shipment.route.trafficDuration, style: AppTheme.light.textTheme.titleLarge),
+                                  Text('Traffic ETA', style: Theme.of(context).textTheme.bodyMedium),
+                                  Text(shipment.route.trafficDuration, style: Theme.of(context).textTheme.titleLarge),
                                 ],
                               ),
                             ),

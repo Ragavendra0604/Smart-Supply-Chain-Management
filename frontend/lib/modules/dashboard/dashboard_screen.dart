@@ -37,10 +37,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
 
     final controller = context.read<DashboardController>();
-    if (controller.recentShipments.isEmpty || controller.isBootstrapping) {
-      // Wait for data to load if it's currently loading or empty
+    
+    // CRITICAL FIX: Prevent infinite loop on empty dashboard
+    if (controller.isBootstrapping) {
       Future.delayed(
           const Duration(milliseconds: 500), _checkAndShowWalkthrough);
+      return;
+    }
+
+    if (controller.recentShipments.isEmpty) {
       return;
     }
 

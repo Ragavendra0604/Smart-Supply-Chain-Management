@@ -66,7 +66,9 @@ class DashboardController extends ChangeNotifier {
       // PRODUCTION-GRADE: Replace polling with Real-time Stream
       _globalStopSubscription?.cancel();
       if (_firebaseService.enabled) {
-        _globalStopSubscription = _firebaseService.watchGlobalStopStatus().listen(_handleStatusUpdate);
+        _globalStopSubscription = _firebaseService
+            .watchGlobalStopStatus()
+            .listen(_handleStatusUpdate);
       } else {
         // Fallback for non-Firebase environments (with jittered polling)
         _systemCheckTimer?.cancel();
@@ -81,7 +83,8 @@ class DashboardController extends ChangeNotifier {
       }
     } catch (error) {
       errorMessage = 'Unable to load dashboard data.';
-      _apiService.logToServer('ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
+      _apiService.logToServer(
+          'ERROR', 'Dashboard bootstrap failed', {'error': error.toString()});
     } finally {
       isBootstrapping = false;
       notifyListeners();
@@ -209,8 +212,8 @@ class DashboardController extends ChangeNotifier {
         priority: priority,
       );
       successMessage = 'Shipment $shipmentId created successfully ($mode).';
-      _apiService.logToServer(
-          'INFO', 'Manual shipment created', {'shipmentId': shipmentId, 'mode': mode});
+      _apiService.logToServer('INFO', 'Manual shipment created',
+          {'shipmentId': shipmentId, 'mode': mode});
       await refreshShipments();
       selectShipment(shipmentId);
     } catch (e) {
@@ -286,7 +289,8 @@ class DashboardController extends ChangeNotifier {
       );
       return result;
     } catch (e) {
-      _apiService.logToServer('ERROR', 'Tactical simulation failed', {'error': e.toString()});
+      _apiService.logToServer(
+          'ERROR', 'Tactical simulation failed', {'error': e.toString()});
       rethrow;
     }
   }
@@ -306,7 +310,8 @@ class DashboardController extends ChangeNotifier {
       );
       if (result['success'] == true && result['analysis'] != null) {
         // Force update the local shipment state with the new AI results
-        if (latestShipment != null && latestShipment!.shipmentId == shipmentId) {
+        if (latestShipment != null &&
+            latestShipment!.shipmentId == shipmentId) {
           final newAi = ShipmentAiInsight.fromMap(result['analysis']);
           latestShipment = latestShipment!.copyWith(
             ai: newAi,
@@ -316,7 +321,7 @@ class DashboardController extends ChangeNotifier {
           );
         }
       }
-      
+
       successMessage = 'Simulation scenario injected and AI re-analyzed.';
       _apiService.logToServer('INFO', 'Scenario injected', {
         'shipmentId': shipmentId,
@@ -327,7 +332,8 @@ class DashboardController extends ChangeNotifier {
       return result;
     } catch (e) {
       errorMessage = 'Failed to inject scenario.';
-      _apiService.logToServer('ERROR', 'Scenario injection failed', {'error': e.toString()});
+      _apiService.logToServer(
+          'ERROR', 'Scenario injection failed', {'error': e.toString()});
       return null;
     }
   }
@@ -348,9 +354,10 @@ class DashboardController extends ChangeNotifier {
       }
 
       await _apiService.toggleGlobalStop(stopped);
-      
+
       if (stopped) {
-        successMessage = 'GLOBAL STOP: All simulations and background services terminated.';
+        successMessage =
+            'GLOBAL STOP: All simulations and background services terminated.';
       } else {
         successMessage = 'SYSTEM RESUMED: Global Stop deactivated.';
         errorMessage = null;
@@ -372,10 +379,12 @@ class DashboardController extends ChangeNotifier {
   Future<void> stopLiveSimulation() async {
     final id = simulatingShipmentId;
     final lastShipment = latestShipment;
-    
+
     _stopSimulation(); // 1. Locally cancel timer and reset state
-    
-    if (id != null && lastShipment != null && lastShipment.currentLocation != null) {
+
+    if (id != null &&
+        lastShipment != null &&
+        lastShipment.currentLocation != null) {
       // 2. Persist the final position before marking as STOPPED
       try {
         await _locationService.sendVehicleLocation(
@@ -461,7 +470,9 @@ class DashboardController extends ChangeNotifier {
         'Starting simulation for ${targetShipment.shipmentId} at index $startIndex');
 
     // FIX: If resuming (startIndex > 0), start from the NEXT point to prevent reverse movement
-    _simulationIndex = (startIndex == 0) ? 0 : (startIndex + 1).clamp(0, targetShipment.route.path.length - 1);
+    _simulationIndex = (startIndex == 0)
+        ? 0
+        : (startIndex + 1).clamp(0, targetShipment.route.path.length - 1);
     isSimulating = true;
     simulatingShipmentId = targetShipment.shipmentId;
     errorMessage = null;
@@ -505,15 +516,16 @@ class DashboardController extends ChangeNotifier {
       },
       onError: (e) {
         debugPrint('🔥 FIREBASE STREAM ERROR: $e');
-        _apiService.logToServer('ERROR', 'Firebase Stream Failed', {'error': e.toString(), 'shipmentId': shipmentId});
-        
+        _apiService.logToServer('ERROR', 'Firebase Stream Failed',
+            {'error': e.toString(), 'shipmentId': shipmentId});
+
         usingFirestore = false;
         errorMessage =
             'Live stream unavailable. Falling back to backend polling.';
+        _activeShipmentSubscription?.cancel();
         activeShipmentStream =
             _apiService.watchShipment(shipmentId).asBroadcastStream();
         _activeShipmentSubscription = activeShipmentStream!.listen(
-
           (shipment) {
             latestShipment = shipment;
             lastUpdated = DateTime.now();
@@ -537,51 +549,55 @@ class DashboardController extends ChangeNotifier {
       orElse: () => latestShipment!,
     );
 
-    if (shipment.route.path.isEmpty || _simulationIndex >= shipment.route.path.length) {
+    if (shipment.route.path.isEmpty ||
+        _simulationIndex >= shipment.route.path.length) {
       _stopSimulation();
       return;
     }
 
     final currentPoint = shipment.currentLocation ?? shipment.route.path[0];
-    
+
     // 1. Calculate base speed from route data (Distance / Duration)
     final distanceMeters = LocationUtils.parseDistance(shipment.route.distance);
     final durationSeconds = LocationUtils.parseDuration(
-      shipment.route.trafficDuration != '--' 
-        ? shipment.route.trafficDuration 
-        : shipment.route.duration
-    );
-    
+        shipment.route.trafficDuration != '--'
+            ? shipment.route.trafficDuration
+            : shipment.route.duration);
+
     double calculatedSpeedKmH = (distanceMeters / durationSeconds) * 3.6;
-    
+
     // Sanitize speed for a truck (avoiding extremes if route data is sparse)
     if (calculatedSpeedKmH < 30) calculatedSpeedKmH = 45.0;
     if (calculatedSpeedKmH > 110) calculatedSpeedKmH = 85.0;
 
     // 2. Apply dynamic environmental modifiers
     double modifier = 1.0;
-    
+
     // Weather impact
     final weather = shipment.weather.condition.toLowerCase();
-    if (weather.contains('rain') || weather.contains('snow') || weather.contains('storm')) {
+    if (weather.contains('rain') ||
+        weather.contains('snow') ||
+        weather.contains('storm')) {
       modifier *= 0.75; // Slow down for bad weather
     }
-    
+
     // Risk/Safety impact
     if (shipment.ai.riskLevel.toUpperCase() == 'HIGH') {
       modifier *= 0.80; // Precautionary slowdown for high-risk zones
     }
 
-    // Final dynamic speed with slight natural jitter
+    // Final dynamic speed
     final double injectedModifier = shipment.simulationSpeedModifier ?? 1.0;
-    final double targetSpeedKmH = (calculatedSpeedKmH * modifier * injectedModifier) + 
-        (math.Random().nextDouble() * 4.0 - 2.0);
+    final double targetSpeedKmH = (calculatedSpeedKmH * modifier * injectedModifier);
 
-    final double intervalSeconds = AppConfig.simulationStepInterval.inMilliseconds / 1000.0;
-    
+    final double intervalSeconds =
+        AppConfig.simulationStepInterval.inMilliseconds / 1000.0;
+
     // Distance to cover in this interval (meters)
-    double distanceToCover = (targetSpeedKmH * 1000 / 3600) * intervalSeconds * simulationSpeedMultiplier;
-    
+    double distanceToCover = (targetSpeedKmH * 1000 / 3600) *
+        intervalSeconds *
+        simulationSpeedMultiplier;
+
     LatLng nextPoint = currentPoint;
     int nextIndex = _simulationIndex;
 
@@ -603,7 +619,8 @@ class DashboardController extends ChangeNotifier {
     }
 
     _simulationIndex = nextIndex;
-    final isDestination = _simulationIndex >= shipment.route.path.length - 1 && distanceToCover >= 0;
+    final isDestination = _simulationIndex >= shipment.route.path.length - 1 &&
+        distanceToCover >= 0;
 
     final updatedShipment = shipment.copyWith(
       currentLocation: nextPoint,

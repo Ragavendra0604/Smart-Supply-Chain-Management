@@ -11,8 +11,10 @@ class LocationUtils {
     final double dLon = (p2.longitude - p1.longitude) * math.pi / 180;
 
     final double a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1) * math.cos(lat2) *
-        math.sin(dLon / 2) * math.sin(dLon / 2);
+        math.cos(lat1) *
+            math.cos(lat2) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     final double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
 
     return earthRadius * c;
@@ -31,7 +33,7 @@ class LocationUtils {
     final clean = distance.replaceAll(',', '').toLowerCase();
     final parts = clean.trim().split(' ');
     if (parts.isEmpty) return 0;
-    
+
     final value = double.tryParse(parts[0]) ?? 0.0;
     if (clean.contains('km')) return value * 1000;
     return value;
@@ -42,19 +44,19 @@ class LocationUtils {
     if (duration == '--' || duration.isEmpty) return 1;
     final clean = duration.toLowerCase();
     double totalSeconds = 0;
-    
-    // Support h, hr, hour, hours
-    final hourMatch = RegExp(r'(\d+)\s*(h|hr|hour)').firstMatch(clean);
+
+    // Support h, hr, hour, hours (Longest first)
+    final hourMatch = RegExp(r'(\d+)\s*(hours|hour|hrs|hr|h)\b').firstMatch(clean);
     if (hourMatch != null) {
       totalSeconds += double.parse(hourMatch.group(1)!) * 3600;
     }
-    
-    // Support m, min, mins, minutes
-    final minMatch = RegExp(r'(\d+)\s*(m|min|minute)').firstMatch(clean);
+
+    // Support m, min, mins, minutes (Longest first)
+    final minMatch = RegExp(r'(\d+)\s*(minutes|minute|mins|min|m)\b').firstMatch(clean);
     if (minMatch != null) {
       totalSeconds += double.parse(minMatch.group(1)!) * 60;
     }
-    
+
     // If it's just a number (like "45 mins" but regex only got the 45)
     if (totalSeconds == 0) {
       final justNum = RegExp(r'^(\d+)$').firstMatch(clean.trim());

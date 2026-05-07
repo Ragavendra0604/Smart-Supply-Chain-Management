@@ -33,9 +33,7 @@ class InputData(BaseModel):
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD", 
                              traffic_level: float = 0.0, speed_modifier: float = 1.0) -> float:
-    # ml_model = get_ml_model()
-    # if ml_model is None:
-    #     return 0.0
+    ml_model = get_ml_model()
         
     try:
         base_dur_sec = route.get("duration_seconds") or 1
@@ -65,15 +63,67 @@ def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode
         elif "rain" in cond or "snow" in cond or "fog" in cond:
             weather_impact = 5.0 + (base_min * 0.15) # 5m base + 15% slowdown
         
-        prediction = google_delay_min + sim_traffic_impact + sim_speed_impact + weather_impact
+        heuristic_prediction = google_delay_min + sim_traffic_impact + sim_speed_impact + weather_impact
         
         mode_upper = mode.upper()
-        if mode_upper == "AIR": prediction *= 0.3 # Air is less affected by ground traffic/weather
-        elif mode_upper == "SEA": prediction *= 1.8 # Sea is slow and very weather dependent
+        if mode_upper == "AIR": heuristic_prediction *= 0.3 # Air is less affected by ground traffic/weather
+        elif mode_upper == "SEA": heuristic_prediction *= 1.8 # Sea is slow and very weather dependent
             
-        return round(max(0.0, prediction), 2)
+        heuristic_prediction = max(0.0, heuristic_prediction)
+        
+        # 4. Enforce ML inference parity
+        if ml_model is not None:
+            try:
+                # CRITICAL FIX: Map features to match RandomForestRegressor training schema
+                # Features: ['traffic_level', 'weather_condition', 'distance_km', 'time_of_day', 'day_of_week']
+
+                # traffic_level: [0.0, 1.0] -> [1, 4]
+                ml_traffic = int(round(traffic_level * 3)) + 1
+                ml_traffic = max(1, min(4, ml_traffic))
+
+                # weather_condition mapping: 1=Clear, 2=Cloudy, 3=Rain, 4=Storm
+                weather_map = {
+                    "clear": 1, "sunny": 1,
+                    "cloudy": 2, "partly cloudy": 2, "overcast": 2, "fog": 2,
+                    "rain": 3, "drizzle": 3, "shower": 3, "snow": 3,
+                    "storm": 4, "thunderstorm": 4, "flood": 4, "tornado": 4, "hurricane": 4
+                }
+                ml_weather = weather_map.get(cond, 2) # Default to Cloudy if unknown
+
+                dist_km = 0.0
+                raw_dist = route.get("distance_meters")
+                if raw_dist is not None:
+                    dist_km = float(raw_dist) / 1000.0
+                
+                now = datetime.now()
+                time_of_day = now.hour
+                day_of_week = now.weekday()
+                
+                features = pd.DataFrame([{
+                    "traffic_level": ml_traffic,
+                    "weather_condition": ml_weather,
+                    "distance_km": dist_km,
+                    "time_of_day": time_of_day,
+                    "day_of_week": day_of_week
+                }])
+
+                # Ensure exact column order as training
+                features = features[['traffic_level', 'weather_condition', 'distance_km', 'time_of_day', 'day_of_week']]
+
+                ml_pred = float(ml_model.predict(features)[0])
+
+                # Log the prediction for audit
+                logger.info(f"ML Predict [SHP]: features={features.to_dict('records')[0]} -> result={ml_pred}")
+
+                # Ensure deterministic output combining ML + Simulation overrides
+                return round(max(0.0, ml_pred + sim_speed_impact), 2)
+            except Exception as ml_err:
+                logger.error(f"ML Model Parity Error (Mapping/Order): {ml_err}. Falling back to deterministic heuristic.")
+                return round(heuristic_prediction, 2)
+
+        return round(heuristic_prediction, 2)
     except Exception as e:
-        logger.error(f"Heuristic Delay Error: {e}")
+        logger.error(f"Heuristic/ML Delay Error: {e}")
         return 0.0
 
 def score_and_rank_routes(routes: List[Dict[str, Any]], weather: Dict[str, Any], mode: str = "ROAD", 

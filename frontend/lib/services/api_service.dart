@@ -91,10 +91,12 @@ class ApiService {
       } catch (_) {
         failCount++;
         // Exponential backoff: 1s, 2s, 4s, 8s … capped at 30s + random jitter
-        final backoffMs = (1000 * (1 << failCount.clamp(0, 5)))
-            .clamp(0, maxBackoffMs);
-        final jitterMs = (backoffMs * 0.2 *
-            (DateTime.now().millisecondsSinceEpoch % 100) / 100)
+        final backoffMs =
+            (1000 * (1 << failCount.clamp(0, 5))).clamp(0, maxBackoffMs);
+        final jitterMs = (backoffMs *
+                0.2 *
+                (DateTime.now().millisecondsSinceEpoch % 100) /
+                100)
             .toInt();
         await Future<void>.delayed(
             Duration(milliseconds: backoffMs + jitterMs));
@@ -197,7 +199,7 @@ class ApiService {
     if (response.statusCode >= 400) {
       throw Exception('Scenario injection failed');
     }
-    
+
     return jsonDecode(response.body);
   }
 
@@ -209,8 +211,9 @@ class ApiService {
     String priority = 'NORMAL',
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/create-shipment');
-    print('[API] POST /create-shipment - Payload: {shipment_id: $shipmentId, origin: $origin, destination: $destination, mode: $mode}');
-    
+    print(
+        '[API] POST /create-shipment - Payload: {shipment_id: $shipmentId, origin: $origin, destination: $destination, mode: $mode}');
+
     try {
       final response = await _client.post(
         uri,
@@ -231,14 +234,17 @@ class ApiService {
         // Parse error response
         try {
           final errorData = jsonDecode(response.body);
-          final errorMsg = errorData['error'] ?? errorData['details'] ?? 'Failed to create shipment';
+          final errorMsg = errorData['error'] ??
+              errorData['details'] ??
+              'Failed to create shipment';
           final errors = errorData['errors'] as List?;
           if (errors != null && errors.isNotEmpty) {
             throw Exception('${errors.first}');
           }
           throw Exception(errorMsg);
         } catch (e) {
-          throw Exception('Failed to create shipment (Status ${response.statusCode}): ${response.body}');
+          throw Exception(
+              'Failed to create shipment (Status ${response.statusCode}): ${response.body}');
         }
       }
     } catch (e) {
@@ -285,14 +291,25 @@ class ApiService {
 
   Future<void> stopBackendSimulator({String? shipmentId}) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/simulator/stop');
-    await _client.post(
-      uri,
-      headers: await _getHeaders(),
-      body: shipmentId != null ? jsonEncode({'shipment_id': shipmentId}) : null,
-    );
+    try {
+      final response = await _client.post(
+        uri,
+        headers: await _getHeaders(),
+        body: jsonEncode({'shipment_id': shipmentId ?? ''}),
+      );
+      // CRITICAL FIX: Check response status code
+      if (response.statusCode >= 400) {
+        debugPrint('[API] POST /api/simulator/stop - Status: ${response.statusCode}');
+        // Non-fatal: Log but don't throw since simulator might already be stopped
+      }
+    } catch (e) {
+      // Non-fatal: Simulator stop failures should not crash the UI
+      debugPrint('[API] POST /api/simulator/stop - Error: $e');
+    }
   }
 
-  Future<void> logToServer(String level, String message, [Map<String, dynamic>? data]) async {
+  Future<void> logToServer(String level, String message,
+      [Map<String, dynamic>? data]) async {
     try {
       final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/logs');
       await _client.post(
@@ -323,18 +340,27 @@ class ApiService {
 
   Future<void> toggleGlobalStop(bool stopped) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/api/system/toggle-stop');
-    await _client.post(
-      uri,
-      headers: await _getHeaders(),
-      body: jsonEncode({'stopped': stopped}),
-    );
+    try {
+      final response = await _client.post(
+        uri,
+        headers: await _getHeaders(),
+        body: jsonEncode({'stopped': stopped}),
+      );
+      // CRITICAL FIX: Check response status code
+      if (response.statusCode >= 400) {
+        throw Exception('Failed to toggle global stop (Status ${response.statusCode})');
+      }
+    } catch (e) {
+      debugPrint('[API] POST /api/system/toggle-stop - Error: $e');
+      rethrow;
+    }
   }
 
   /// Finalizes a delivery and generates a post-delivery AI report.
   /// Called when the shipment status reaches DELIVERED.
   Future<Map<String, dynamic>> completeShipment(String shipmentId) async {
-    final uri = Uri.parse(
-        '${AppConfig.apiBaseUrl}/api/shipments/$shipmentId/complete');
+    final uri =
+        Uri.parse('${AppConfig.apiBaseUrl}/api/shipments/$shipmentId/complete');
     final response = await _client.post(
       uri,
       headers: await _getHeaders(),
@@ -348,4 +374,3 @@ class ApiService {
     return Map<String, dynamic>.from(body['summary'] as Map);
   }
 }
-

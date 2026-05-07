@@ -44,7 +44,10 @@ async def validate_oidc_token(request: Request, call_next):
         # Verify the OIDC token. The audience should be the service URL.
         # In Cloud Run, the audience is the service URL.
         # We can also verify that the 'iss' is accounts.google.com
-        id_info = id_token.verify_oauth2_token(token, requests.Request())
+
+        # CRITICAL FIX: Verify audience if provided in environment
+        audience = os.environ.get("AI_SERVICE_URL")
+        id_info = id_token.verify_oauth2_token(token, requests.Request(), audience=audience)
         
         # Optionally verify the service account email if known
         # if id_info['email'] != expected_service_account:

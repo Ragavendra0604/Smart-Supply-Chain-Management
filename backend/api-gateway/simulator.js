@@ -12,6 +12,8 @@ const destination = "Bangalore";
 
 let path = [];
 let index = 0;
+let movementIntervalId = null;
+let aiIntervalId = null;
 
 /* ---------------- GET ROUTE PATH ---------------- */
 const getRoutePath = async () => {
@@ -24,6 +26,9 @@ const getRoutePath = async () => {
           destination,
           key: GOOGLE_MAPS_API_KEY,
           departure_time: 'now'
+        },
+        headers: {
+          'Referer': process.env.GOOGLE_MAPS_REFERER || 'https://smartsupplychain-3b036.web.app'
         }
       }
     );
@@ -51,16 +56,30 @@ const getRoutePath = async () => {
   }
 };
 
+/* ---- CLEANUP: Clear all intervals (Memory leak fix) ---- */
+const stopSimulator = () => {
+  if (movementIntervalId !== null) {
+    clearInterval(movementIntervalId);
+    movementIntervalId = null;
+    console.log("🛑 Movement interval cleared");
+  }
+  if (aiIntervalId !== null) {
+    clearInterval(aiIntervalId);
+    aiIntervalId = null;
+    console.log("🛑 AI analysis interval cleared");
+  }
+};
+
 /* ---------------- VEHICLE MOVEMENT ---------------- */
 const startMovement = () => {
-  setInterval(async () => {
+  movementIntervalId = setInterval(async () => {
     if (path.length === 0) return;
 
     if (index < path.length) {
       const [lat, lng] = path[index];
 
       try {
-        await axios.post(`${process.env.API_BASE_URL || 'https://api-gateway-835572562592.us-central1.run.app'}/update-location`, {
+        await axios.post(`${process.env.API_BASE_URL}/update-location`, {
           shipment_id,
           lat,
           lng
@@ -75,6 +94,8 @@ const startMovement = () => {
       }
     } else {
       console.log("🏁 Reached destination");
+      // CRITICAL FIX: Stop intervals when done to prevent memory leak
+      stopSimulator();
     }
 
   }, 5000); // every 5 sec
@@ -84,7 +105,7 @@ const startMovement = () => {
 const createShipment = async () => {
   try {
     console.log("📦 Creating shipment...");
-    await axios.post(`${process.env.API_BASE_URL || 'https://api-gateway-835572562592.us-central1.run.app'}/create-shipment`, {
+    await axios.post(`${process.env.API_BASE_URL}/create-shipment`, {
       shipment_id,
       origin,
       destination
@@ -97,10 +118,10 @@ const createShipment = async () => {
 
 /* ---------------- AI ANALYSIS ---------------- */
 const startAI = () => {
-  setInterval(async () => {
+  aiIntervalId = setInterval(async () => {
     try {
       console.log("🤖 Running AI analysis...");
-      await axios.post(`${process.env.API_BASE_URL || 'https://api-gateway-835572562592.us-central1.run.app'}/api/shipments/analyze`, {
+      await axios.post(`${process.env.API_BASE_URL}/api/shipments/analyze`, {
         shipment_id
       });
       console.log("AI analysis completed");
@@ -109,6 +130,19 @@ const startAI = () => {
     }
   }, 25000);
 };
+
+/* -------- GRACEFUL SHUTDOWN HANDLER -------- */
+process.on('SIGTERM', () => {
+  console.log('[SHUTDOWN] SIGTERM received. Cleaning up intervals...');
+  stopSimulator();
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('[SHUTDOWN] SIGINT received. Cleaning up intervals...');
+  stopSimulator();
+  process.exit(0);
+});
 
 /* ---------------- INIT ---------------- */
 const startSimulator = async () => {

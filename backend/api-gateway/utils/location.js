@@ -2,7 +2,7 @@
  * Haversine formula to calculate distance between two coordinates in meters
  */
 export const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return Infinity;
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return Infinity;
 
   const R = 6371e3; // meters
   const φ1 = lat1 * Math.PI / 180;

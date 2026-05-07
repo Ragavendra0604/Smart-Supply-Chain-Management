@@ -1,0 +1,23 @@
+# Task Management
+
+- [x] Project Exploration and Audit Preparation
+    - [x] List files and identify project structure
+    - [x] Analyze `backend/api-gateway` (Node.js)
+    - [x] Analyze `backend/ai-service` (Python)
+    - [x] Analyze `frontend` (Flutter)
+    - [x] Identify critical issues and bugs
+- [x] Create Implementation Plan
+    - [x] Document findings and root cause analysis
+    - [x] Define fixes for Backend and Frontend
+    - [x] Get user approval
+- [x] Execution Phase (Fixing identified issues)
+    - [x] Secure API Gateway routes
+    - [x] Update CORS configuration
+    - [x] Fix AI Service ML feature mapping
+    - [x] Implement OIDC audience verification
+    - [x] Fix Frontend walkthrough infinite loop
+    - [x] Standardize Frontend theme usage
+- [x] Verification Phase
+    - [x] Verify ML model features
+    - [x] Verify security middleware application
+    - [x] Generate walkthrough report

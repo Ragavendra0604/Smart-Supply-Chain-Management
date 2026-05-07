@@ -38,23 +38,29 @@ DateTime? dateTimeFromDynamic(Object? value) {
 }
 
 LatLng? latLngFromDynamic(Object? value) {
+  // CRITICAL FIX: Properly handle null values to prevent NullPointerException
+  if (value == null) return null;
+
   if (value is GeoPoint) {
     return LatLng(value.latitude, value.longitude);
   }
 
   if (value is List && value.length >= 2) {
-    return LatLng(
-      numValue(value[0]).toDouble(),
-      numValue(value[1]).toDouble(),
-    );
+    final lat = numValue(value[0]).toDouble();
+    final lng = numValue(value[1]).toDouble();
+    // Guard: Return null for invalid coordinates (0, 0)
+    if (lat == 0.0 && lng == 0.0) return null;
+    return LatLng(lat, lng);
   }
 
   final data = mapValue(value);
   if (data.isEmpty) return null;
 
-  final lat = numValue(data['lat']).toDouble();
-  final lng = numValue(data['lng']).toDouble();
-  if (lat == 0 && lng == 0) return null;
+  final lat = numValue(data['lat'] ?? data['latitude']).toDouble();
+  final lng = numValue(data['lng'] ?? data['longitude']).toDouble();
+  
+  // Guard: Return null for invalid coordinates (0, 0)
+  if (lat == 0.0 && lng == 0.0) return null;
 
   return LatLng(lat, lng);
 }

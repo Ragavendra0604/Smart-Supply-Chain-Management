@@ -28,6 +28,9 @@ const getRoute = async (origin, destination) => {
         key: process.env.GOOGLE_MAPS_API_KEY,
         departure_time: 'now',
         alternatives: true
+      },
+      headers: {
+        'Referer': process.env.GOOGLE_MAPS_REFERER || 'https://smartsupplychain-3b036.web.app'
       }
     });
 

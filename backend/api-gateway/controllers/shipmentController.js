@@ -218,7 +218,7 @@ const applyRoute = async (req, res) => {
       // The mapsService.getRoute returns full path.
       // For now, let's just mark it. In a real system, we'd swap the actual path data.
       console.log(`[APPLY] Promoting recommended route: ${recommendedRoute.summary}`);
-      
+
       // If routeData exists, we should try to match it
       const currentRoutes = shipment.routeData || [];
       const matchIndex = currentRoutes.findIndex(r => r.summary === recommendedRoute.summary);
