@@ -390,7 +390,7 @@ app.post('/update-location', authMiddleware, async (req, res) => {
       if (trigger_ai) {
         // Await the event publishing to ensure AI analysis is triggered reliably
         await eventManager.publishEvent('shipment.location_updated', {
-          shipment_id, lat, lng, traceId: req.traceId
+          shipment_id, lat, lng, speed_kmh, traceId: req.traceId
         });
       }
 

@@ -128,6 +128,7 @@ class DeliverySummaryRequest(BaseModel):
     weather_encountered: Optional[str] = "Clear"
     delays_mins: Optional[float] = 0.0
     news_disruptions: Optional[int] = 0
+    is_simulation: Optional[bool] = True
     model_name: Optional[str] = "gemini-2.5-flash"
 
 

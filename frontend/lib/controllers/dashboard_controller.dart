@@ -11,7 +11,6 @@ import '../services/firebase_service.dart';
 import '../services/location_service.dart';
 import '../core/utils/location_utils.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'dart:math' as math;
 
 class DashboardController extends ChangeNotifier {
   DashboardController({
@@ -546,129 +545,132 @@ class DashboardController extends ChangeNotifier {
   }
 
   Future<void> _advanceSimulation(String targetId) async {
-    final shipment = recentShipments.firstWhere(
-      (s) => s.shipmentId == targetId,
-      orElse: () => latestShipment!,
-    );
-
-    if (shipment.route.path.isEmpty ||
-        _simulationIndex >= shipment.route.path.length) {
-      _stopSimulation();
-      return;
-    }
-
-    final currentPoint = shipment.currentLocation ?? shipment.route.path[0];
-
-    // 1. Calculate base speed from route data (Distance / Duration)
-    final distanceMeters = LocationUtils.parseDistance(shipment.route.distance);
-    final durationSeconds = LocationUtils.parseDuration(
-        shipment.route.trafficDuration != '--'
-            ? shipment.route.trafficDuration
-            : shipment.route.duration);
-
-    double calculatedSpeedKmH = (distanceMeters / durationSeconds) * 3.6;
-
-    // Sanitize speed for a truck (avoiding extremes if route data is sparse)
-    if (calculatedSpeedKmH < 30) calculatedSpeedKmH = 45.0;
-    if (calculatedSpeedKmH > 110) calculatedSpeedKmH = 85.0;
-
-    // 2. Apply dynamic environmental modifiers
-    double modifier = 1.0;
-
-    // Weather impact
-    final weather = shipment.weather.condition.toLowerCase();
-    if (weather.contains('rain') ||
-        weather.contains('snow') ||
-        weather.contains('storm')) {
-      modifier *= 0.75; // Slow down for bad weather
-    }
-
-    // Risk/Safety impact
-    if (shipment.ai.riskLevel.toUpperCase() == 'HIGH') {
-      modifier *= 0.80; // Precautionary slowdown for high-risk zones
-    }
-
-    // Final dynamic speed
-    final double injectedModifier = shipment.simulationSpeedModifier ?? 1.0;
-    final double targetSpeedKmH = (calculatedSpeedKmH * modifier * injectedModifier);
-
-    final double intervalSeconds =
-        AppConfig.simulationStepInterval.inMilliseconds / 1000.0;
-
-    // Distance to cover in this interval (meters)
-    double distanceToCover = (targetSpeedKmH * 1000 / 3600) *
-        intervalSeconds *
-        simulationSpeedMultiplier;
-
-    LatLng nextPoint = currentPoint;
-    int nextIndex = _simulationIndex;
-
-    // Move along the path until we've covered the distance or reached the end
-    while (distanceToCover > 0 && nextIndex < shipment.route.path.length) {
-      final point = shipment.route.path[nextIndex];
-      final distToNext = LocationUtils.calculateDistance(nextPoint, point);
-
-      if (distToNext <= distanceToCover) {
-        distanceToCover -= distToNext;
-        nextPoint = point;
-        nextIndex++;
-      } else {
-        // Interpolate between current position and next waypoint
-        final fraction = distanceToCover / distToNext;
-        nextPoint = LocationUtils.interpolate(nextPoint, point, fraction);
-        distanceToCover = 0;
-      }
-    }
-
-    _simulationIndex = nextIndex;
-    final isDestination = _simulationIndex >= shipment.route.path.length - 1 &&
-        distanceToCover >= 0;
-
-    final updatedShipment = shipment.copyWith(
-      currentLocation: nextPoint,
-      status: isDestination ? 'DELIVERED' : 'IN_TRANSIT',
-      speedKmH: isDestination ? 0 : targetSpeedKmH,
-    );
-
-    if (isDestination) {
-      successMessage = 'Shipment $targetId has arrived at its destination!';
-    }
-
-    _syncShipmentSummary(updatedShipment);
-    if (activeShipmentId == targetId) {
-      latestShipment = updatedShipment;
-    }
-    notifyListeners();
-
     if (_isSendingLocation) return;
     _isSendingLocation = true;
 
     try {
-      await _locationService.sendVehicleLocation(
-        shipmentId: targetId,
-        point: nextPoint,
-        speedKmH: updatedShipment.speedKmH,
-        currentStepIndex: _simulationIndex,
+      final shipment = recentShipments.firstWhere(
+        (s) => s.shipmentId == targetId,
+        orElse: () => latestShipment!,
       );
-      if (isDestination) {
+
+      if (shipment.route.path.isEmpty ||
+          _simulationIndex >= shipment.route.path.length) {
         _stopSimulation();
-        // Trigger post-delivery AI summary and state finalization
-        try {
-          final summaryData = await _apiService.completeShipment(targetId);
-          if (activeShipmentId == targetId) {
-            latestShipment = latestShipment!.copyWith(
-              status: 'DELIVERED',
-              deliverySummary: DeliverySummary.fromMap(summaryData),
-            );
-            _syncShipmentSummary(latestShipment!);
-            notifyListeners();
-          }
-        } catch (e) {
-          debugPrint('Post-delivery completion failed: $e');
+        return;
+      }
+
+      final currentPoint = shipment.currentLocation ?? shipment.route.path[0];
+
+      // 1. Calculate base speed from route data (Distance / Duration)
+      final distanceMeters = LocationUtils.parseDistance(shipment.route.distance);
+      final durationSeconds = LocationUtils.parseDuration(
+          shipment.route.trafficDuration != '--'
+              ? shipment.route.trafficDuration
+              : shipment.route.duration);
+
+      double calculatedSpeedKmH = (distanceMeters / durationSeconds) * 3.6;
+
+      // Sanitize speed for a truck (avoiding extremes if route data is sparse)
+      if (calculatedSpeedKmH < 30) calculatedSpeedKmH = 45.0;
+      if (calculatedSpeedKmH > 110) calculatedSpeedKmH = 85.0;
+
+      // 2. Apply dynamic environmental modifiers
+      double modifier = 1.0;
+
+      // Weather impact
+      final weather = shipment.weather.condition.toLowerCase();
+      if (weather.contains('rain') ||
+          weather.contains('snow') ||
+          weather.contains('storm')) {
+        modifier *= 0.75; // Slow down for bad weather
+      }
+
+      // Risk/Safety impact
+      if (shipment.ai.riskLevel.toUpperCase() == 'HIGH') {
+        modifier *= 0.80; // Precautionary slowdown for high-risk zones
+      }
+
+      // Final dynamic speed
+      final double injectedModifier = shipment.simulationSpeedModifier ?? 1.0;
+      final double targetSpeedKmH =
+          (calculatedSpeedKmH * modifier * injectedModifier);
+
+      final double intervalSeconds =
+          AppConfig.simulationStepInterval.inMilliseconds / 1000.0;
+
+      // Distance to cover in this interval (meters)
+      double distanceToCover = (targetSpeedKmH * 1000 / 3600) *
+          intervalSeconds *
+          simulationSpeedMultiplier;
+
+      LatLng nextPoint = currentPoint;
+      int nextIndex = _simulationIndex;
+
+      // Move along the path until we've covered the distance or reached the end
+      while (distanceToCover > 0 && nextIndex < shipment.route.path.length) {
+        final point = shipment.route.path[nextIndex];
+        final distToNext = LocationUtils.calculateDistance(nextPoint, point);
+
+        if (distToNext <= distanceToCover) {
+          distanceToCover -= distToNext;
+          nextPoint = point;
+          nextIndex++;
+        } else {
+          // Interpolate between current position and next waypoint
+          final fraction = distanceToCover / distToNext;
+          nextPoint = LocationUtils.interpolate(nextPoint, point, fraction);
+          distanceToCover = 0;
         }
       }
-    } catch (_) {
-      errorMessage = 'Simulation update failed.';
+
+      _simulationIndex = nextIndex;
+      final isDestination = _simulationIndex >= shipment.route.path.length - 1 &&
+          distanceToCover >= 0;
+
+      final updatedShipment = shipment.copyWith(
+        currentLocation: nextPoint,
+        status: isDestination ? 'DELIVERED' : 'IN_TRANSIT',
+        speedKmH: isDestination ? 0 : targetSpeedKmH,
+      );
+
+      if (isDestination) {
+        successMessage = 'Shipment $targetId has arrived at its destination!';
+      }
+
+      _syncShipmentSummary(updatedShipment);
+      if (activeShipmentId == targetId) {
+        latestShipment = updatedShipment;
+      }
+      notifyListeners();
+
+      try {
+        await _locationService.sendVehicleLocation(
+          shipmentId: targetId,
+          point: nextPoint,
+          speedKmH: updatedShipment.speedKmH,
+          currentStepIndex: _simulationIndex,
+        );
+        if (isDestination) {
+          _stopSimulation();
+          // Trigger post-delivery AI summary and state finalization
+          try {
+            final summaryData = await _apiService.completeShipment(targetId);
+            if (activeShipmentId == targetId) {
+              latestShipment = latestShipment!.copyWith(
+                status: 'DELIVERED',
+                deliverySummary: DeliverySummary.fromMap(summaryData),
+              );
+              _syncShipmentSummary(latestShipment!);
+              notifyListeners();
+            }
+          } catch (e) {
+            debugPrint('Post-delivery completion failed: $e');
+          }
+        }
+      } catch (_) {
+        errorMessage = 'Simulation update failed.';
+      }
     } finally {
       _isSendingLocation = false;
     }

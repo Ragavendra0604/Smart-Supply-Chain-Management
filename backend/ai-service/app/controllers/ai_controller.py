@@ -38,15 +38,16 @@ async def handle_pubsub_event(request: Request):
             if event_type == "shipment.location_updated":
                 shipment_id = data.get("shipment_id")
                 msg_timestamp = payload.get("timestamp")
+                current_speed = data.get("speed_kmh", 0.0)
                 if shipment_id:
-                    await process_ai_analysis(shipment_id, msg_timestamp)
+                    await process_ai_analysis(shipment_id, msg_timestamp, current_speed)
 
         return JSONResponse(status_code=200, content={"status": "success"})
     except Exception as e:
         logger.error(f"Pub/Sub Processing Error: {traceback.format_exc()}")
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
-async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = None):
+async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = None, current_speed: float = 0.0):
     doc_ref = db.collection("shipments").document(shipment_id)
     shipment_snapshot = doc_ref.get()
     if not shipment_snapshot.exists:
@@ -143,6 +144,8 @@ async def process_ai_analysis(shipment_id: str, msg_timestamp: Optional[str] = N
             delivery_deadline=shipment_data.get("delivery_deadline"),
             fuel_level=shipment_data.get("fuel_level", 100.0),
             vehicle_health=shipment_data.get("vehicle_health", "Good"),
+            current_speed=current_speed,
+            is_simulation=True,
             model_name=shipment_data.get("ai_config", {}).get("model") or "gemini-2.5-flash"
         )
         # Optimization: Use summarized routes to save AI tokens

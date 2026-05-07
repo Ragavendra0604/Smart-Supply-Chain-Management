@@ -28,45 +28,54 @@ class _MainNavigationWrapperState extends State<MainNavigationWrapper> {
       bottomNavigationBar: Material(
         elevation: 10,
         color: Colors.white,
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -5),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              child: BottomNavigationBar(
+                type: BottomNavigationBarType.fixed,
+                backgroundColor: Colors.white,
+                elevation: 0,
+                currentIndex: _currentIndex,
+                onTap: (index) {
+                  setState(() {
+                    _currentIndex = index;
+                  });
+                },
+                items: const [
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.dashboard_outlined),
+                    activeIcon: Icon(Icons.dashboard),
+                    label: 'Dashboard',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.map_outlined),
+                    activeIcon: Icon(Icons.map),
+                    label: 'Live Track',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.inventory_2_outlined),
+                    activeIcon: Icon(Icons.inventory_2),
+                    label: 'Details',
+                  ),
+                  BottomNavigationBarItem(
+                    icon: Icon(Icons.insights_outlined),
+                    activeIcon: Icon(Icons.insights),
+                    label: 'Insights',
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: BottomNavigationBar(
-            currentIndex: _currentIndex,
-            onTap: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            items: const [
-              BottomNavigationBarItem(
-                icon: Icon(Icons.dashboard_outlined),
-                activeIcon: Icon(Icons.dashboard),
-                label: 'Dashboard',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.map_outlined),
-                activeIcon: Icon(Icons.map),
-                label: 'Live Track',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.inventory_2_outlined),
-                activeIcon: Icon(Icons.inventory_2),
-                label: 'Details',
-              ),
-              BottomNavigationBarItem(
-                icon: Icon(Icons.insights_outlined),
-                activeIcon: Icon(Icons.insights),
-                label: 'Insights',
-              ),
-            ],
+            ),
           ),
         ),
       ),

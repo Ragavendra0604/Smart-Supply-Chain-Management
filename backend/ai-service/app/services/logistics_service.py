@@ -29,6 +29,8 @@ class InputData(BaseModel):
     vehicle_health: Optional[str] = "Good"
     traffic_level: Optional[float] = 0.0
     speed_modifier: Optional[float] = 1.0
+    current_speed: Optional[float] = 0.0
+    is_simulation: Optional[bool] = True
     model_name: Optional[str] = "gemini-2.5-flash"
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD", 
@@ -297,6 +299,8 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             - Vehicle Health: {data.vehicle_health}
             - Traffic Level: {data.traffic_level}
             - Speed Modifier: {data.speed_modifier}
+            - Current Speed: {data.current_speed} km/h
+            - Simulation Mode: {"ACTIVE (Ignore high-speed physics anomalies)" if data.is_simulation else "DISABLED (Real-world physics)"}
 
             AVAILABLE DATA SOURCES (MANDATORY USAGE):
             - Route Summary: {json.dumps([{"summary": r.get("summary"), "distance": r.get("distance_km"), "duration": r.get("travel_time_min")} for r in (data.routeData if isinstance(data.routeData, list) else [])]) if data.routeData else "[]"}
@@ -495,6 +499,7 @@ You have just completed delivery analysis for a shipment.
 Generate a concise, professional post-delivery intelligence report in JSON.
 
 ⚠️ DATA QUALITY NOTICE: Telemetry Status = {telemetry_status}
+📊 SIMULATION MODE: {"ACTIVE (Ignore physics violations/high speeds)" if req.is_simulation else "DISABLED (Real-world enforcement)"}
 
 DELIVERY TELEMETRY:
 - Shipment ID: {req.shipment_id}

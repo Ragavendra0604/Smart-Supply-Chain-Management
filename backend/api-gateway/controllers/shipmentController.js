@@ -14,7 +14,7 @@ import { sanitizeAiResponse } from '../utils/validation.js';
  * Orchestrates multi-service data fetching and AI inference in parallel.
  * Target Latency: < 2s | Performance: Parallel Async | Cost: Caching + Cooldown.
  */
-const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = false) => {
+const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = false, injectedState = null) => {
   // 1. DATA ACCESS & COOLDOWN LAYER
   const doc = await db().collection('shipments').doc(shipment_id).get();
   if (!doc.exists) throw new Error('Shipment not found');
@@ -33,7 +33,7 @@ const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = fal
 
   // 2. PARALLEL ENRICHMENT ENGINE
 
-  const [routes, weather, news] = await Promise.all([
+  const [routes, weatherLive, news] = await Promise.all([
     routeService.getRoute(shipment.origin, shipment.destination, mode).catch(err => {
       console.error('[ROUTE ERROR]', err.message);
       return [];
@@ -41,6 +41,15 @@ const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = fal
     weatherService.getWeather(shipment.destination).catch(() => weatherService.getWeatherFallback()),
     newsService.getNews(shipment.origin, shipment.destination).catch(() => [])
   ]);
+
+  // Merge injected state into weather
+  const weather = { ...weatherLive };
+  if (injectedState?.weatherCondition) {
+    weather.condition = injectedState.weatherCondition;
+  }
+  if (injectedState?.trafficLevel !== undefined) {
+    weather.traffic_level = injectedState.trafficLevel;
+  }
 
   // 3. AI INFERENCE (Strategy Pattern)
   const aiPayload = {
@@ -55,7 +64,9 @@ const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = fal
     cargo_type: shipment.cargo_type || 'General',
     priority: shipment.priority || 'NORMAL',
     fuel_level: shipment.fuel_level || 100,
-    vehicle_health: shipment.vehicle_health || 'GOOD'
+    vehicle_health: shipment.vehicle_health || 'GOOD',
+    ...(injectedState?.trafficLevel !== undefined && { traffic_level: injectedState.trafficLevel }),
+    ...(injectedState?.speedModifier !== undefined && { speed_modifier: injectedState.speedModifier })
   };
 
   const rawAiResponse = await aiService.getPrediction(aiPayload, traceId);
@@ -91,17 +102,22 @@ const performAnalysis = async (shipment_id, traceId = null, bypassCooldown = fal
   }
 
   const shipmentRef = db().collection('shipments').doc(shipment_id);
-  await shipmentRef.update({
-    ...enriched_data,
-    aiResponse: {
-      ...aiResponse,
-      last_analyzed: new Date()
-    },
-    routeData: routes,
-    weatherData: weather,
-    newsData: news,
-    status: 'ANALYZED',
-    updated_at: new Date()
+  await db().runTransaction(async (t) => {
+    const currentDoc = await t.get(shipmentRef);
+    if (!currentDoc.exists) throw new Error('Shipment not found during transaction');
+    
+    t.update(shipmentRef, {
+      ...enriched_data,
+      aiResponse: {
+        ...aiResponse,
+        last_analyzed: new Date()
+      },
+      routeData: routes,
+      weatherData: weather,
+      newsData: news,
+      status: currentDoc.data().status === 'ROUTE_APPLIED' ? 'ROUTE_APPLIED' : 'ANALYZED',
+      updated_at: new Date()
+    });
   });
 
   // 6. PRODUCTION FEEDBACK & ANALYTICS
@@ -197,46 +213,54 @@ const applyRoute = async (req, res) => {
     if (!shipment_id) throw new Error('shipment_id is required');
 
     const shipmentRef = db().collection('shipments').doc(shipment_id);
-    const doc = await shipmentRef.get();
-    if (!doc.exists) throw new Error('Shipment not found');
-    const shipment = doc.data();
+    let isAlreadyApplied = false;
 
-    // Find the recommended route to promote it to primary
-    const aiResponse = shipment.aiResponse || {};
-    const allRoutes = aiResponse.all_routes || [];
-    const recommendedRoute = allRoutes.find(r => r.is_recommended);
+    await db().runTransaction(async (t) => {
+      const doc = await t.get(shipmentRef);
+      if (!doc.exists) throw new Error('Shipment not found');
+      const shipment = doc.data();
 
-    let updateData = {
-      status: 'ROUTE_APPLIED',
-      route_applied_at: new Date(),
-      updated_at: new Date()
-    };
-
-    if (recommendedRoute) {
-      // If we have a recommended route object, we should ideally have its path data too.
-      // But all_routes in AI response might not have full path. 
-      // The mapsService.getRoute returns full path.
-      // For now, let's just mark it. In a real system, we'd swap the actual path data.
-      console.log(`[APPLY] Promoting recommended route: ${recommendedRoute.summary}`);
-
-      // If routeData exists, we should try to match it
-      const currentRoutes = shipment.routeData || [];
-      const matchIndex = currentRoutes.findIndex(r => r.summary === recommendedRoute.summary);
-      if (matchIndex > 0) {
-        const newRoutes = [...currentRoutes];
-        const [moved] = newRoutes.splice(matchIndex, 1);
-        newRoutes.unshift(moved);
-        updateData.routeData = newRoutes;
+      // Idempotency check inside transaction
+      if (shipment.status === 'ROUTE_APPLIED') {
+        isAlreadyApplied = true;
+        return;
       }
+
+      // Find the recommended route to promote it to primary
+      const aiResponse = shipment.aiResponse || {};
+      const allRoutes = aiResponse.all_routes || [];
+      const recommendedRoute = allRoutes.find(r => r.is_recommended);
+
+      let updateData = {
+        status: 'ROUTE_APPLIED',
+        route_applied_at: new Date(),
+        updated_at: new Date()
+      };
+
+      if (recommendedRoute) {
+        console.log(`[APPLY] Promoting recommended route: ${recommendedRoute.summary}`);
+
+        // If routeData exists, we should try to match it
+        const currentRoutes = shipment.routeData || [];
+        const matchIndex = currentRoutes.findIndex(r => r.summary === recommendedRoute.summary);
+        if (matchIndex > 0) {
+          const newRoutes = [...currentRoutes];
+          const [moved] = newRoutes.splice(matchIndex, 1);
+          newRoutes.unshift(moved);
+          updateData.routeData = newRoutes;
+        }
+      }
+
+      t.update(shipmentRef, updateData);
+    });
+
+    if (!isAlreadyApplied) {
+      eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch(() => { });
     }
-
-    await shipmentRef.update(updateData);
-
-    eventManager.publishEvent('shipment.route_applied', { shipment_id }).catch(() => { });
 
     res.json({
       success: true,
-      message: `Optimized route applied for ${shipment_id}`,
+      message: isAlreadyApplied ? `Route already applied for ${shipment_id}` : `Optimized route applied for ${shipment_id}`,
       status: 'ROUTE_APPLIED'
     });
   } catch (err) {
@@ -260,7 +284,11 @@ const injectSimulation = async (req, res) => {
 
     // AI TRIGGER: Force re-analysis to refresh reasoning and metrics based on injected state
     // bypassCooldown=true ensures the new weather/traffic params are always reflected.
-    const analysisResult = await performAnalysis(shipment_id, req.traceId, true).catch(err => {
+    const analysisResult = await performAnalysis(shipment_id, req.traceId, true, {
+      weatherCondition,
+      trafficLevel,
+      speedModifier
+    }).catch(err => {
       console.error('[INJECT-AI] Analysis trigger failed:', err.message);
       return null;
     });

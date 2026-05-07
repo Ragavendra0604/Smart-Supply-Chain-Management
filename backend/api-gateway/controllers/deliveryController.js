@@ -137,6 +137,7 @@ export const completeDelivery = async (req, res) => {
       weather_encountered: weather,
       delays_mins: Math.max(0, actualMin - plannedMin),
       news_disruptions: newsDisruptions,
+      is_simulation: true,
       model_name: 'gemini-2.5-flash',
     };
 
