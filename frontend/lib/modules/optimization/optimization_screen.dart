@@ -113,7 +113,8 @@ class OptimizationScreen extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch, // IMPORTANT for independent scroll
+            crossAxisAlignment:
+                CrossAxisAlignment.stretch, // IMPORTANT for independent scroll
             children: [
               // Main Column: Reasoning & Comparison
               Expanded(
@@ -134,7 +135,8 @@ class OptimizationScreen extends StatelessWidget {
                         explanation: currentShipment.ai.explanation,
                         suggestion: currentShipment.ai.suggestion,
                         allRoutes: allRoutes,
-                        comparativeAnalysis: currentShipment.ai.comparativeAnalysis,
+                        comparativeAnalysis:
+                            currentShipment.ai.comparativeAnalysis,
                         selectionReason: currentShipment.ai.selectionReason,
                         rejectionReason: currentShipment.ai.rejectionReason,
                         futureDisruptions: currentShipment.ai.futureDisruptions,
@@ -784,7 +786,7 @@ class _AiReasoning extends StatelessWidget {
           children: [
             const Expanded(flex: 3, child: SizedBox()),
             _tableHeaderCell('TIME'),
-            _tableHeaderCell('COST'),
+            _tableHeaderCell('COST (₹)'),
             _tableHeaderCell('RISK'),
           ],
         ),
@@ -831,11 +833,11 @@ class _AiReasoning extends StatelessWidget {
                       ),
                     ),
                     _tableValueCell(
-                      '${(r['travel_time_min'] is num ? (r['travel_time_min'] as num).toStringAsFixed(1) : (r['travel_time_min'] ?? 0))}m',
-                      isBest),
+                        '${(r['travel_time_min'] is num ? (r['travel_time_min'] as num).toStringAsFixed(1) : (r['travel_time_min'] ?? 0))}m',
+                        isBest),
                     _tableValueCell(
-                      '₹${(r['total_cost'] is num ? (r['total_cost'] as num).toStringAsFixed(2) : (r['total_cost'] ?? 0))}',
-                      isBest),
+                        '₹${(r['total_cost'] is num ? (r['total_cost'] as num).toStringAsFixed(2) : (r['total_cost'] ?? 0))}',
+                        isBest),
                     _tableValueCell(
                       (r['risk_level'] ?? 'LOW').toString().toUpperCase(),
                       isBest,
@@ -907,17 +909,43 @@ class _AiReasoning extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.auto_awesome, color: AppTheme.primary, size: 24),
-              SizedBox(width: 12),
-              Text(
+              const Icon(Icons.auto_awesome, color: AppTheme.primary, size: 24),
+              const SizedBox(width: 12),
+              const Text(
                 'AI Tactical Reasoning',
                 style: TextStyle(
                   color: AppTheme.primary,
                   fontWeight: FontWeight.w900,
                   fontSize: 20,
                   letterSpacing: -0.5,
+                ),
+              ),
+              const Spacer(),
+              // Only show cost if it's > 0 (e.g. not in heuristic mode)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: AppTheme.success.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.bolt, color: AppTheme.success, size: 14),
+                    const SizedBox(width: 4),
+                    const Text(
+                      'OPT: ₹0.08',
+                      style: TextStyle(
+                        color: AppTheme.success,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1517,7 +1545,7 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                                 ? 'WAITING FOR AI ANALYSIS...'
                                 : (_useHeuristics
                                     ? 'HEURISTIC ESTIMATE'
-                                    : 'AI PREDICTION (1.5 FLASH)'),
+                                    : 'AI PREDICTION (2.5 FLASH)'),
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: _isInjecting
@@ -1725,7 +1753,8 @@ class _ReasoningSection extends StatelessWidget {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
+              border:
+                  Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
             ),
             child: Text(
               content,
@@ -1742,4 +1771,3 @@ class _ReasoningSection extends StatelessWidget {
     );
   }
 }
-

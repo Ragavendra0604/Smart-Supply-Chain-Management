@@ -266,7 +266,11 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
                     "decision": decision,
                     "confidence": 0.9,
                     "bottlenecks": [f"Fallback mode: {reason}"],
-                    "recommendation": f"Proceed with {decision} protocol based on heuristic risk of {risk_score}."
+                    "recommendation": f"Proceed with {decision} protocol based on heuristic risk of {risk_score}.",
+                    "selection_reason": f"Heuristic analysis suggests the current path is viable with a risk score of {risk_score}.",
+                    "rejection_reason": "Alternatives were not significantly better in the current heuristic simulation.",
+                    "future_disruptions": "No major disruptions predicted by the basic heuristic engine.",
+                    "query_cost_rupees": 0.0
                 }
             }
         }
@@ -373,6 +377,10 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             # --- SCHEMA ENFORCEMENT ---
             try:
                 res_json = json.loads(response.text.strip())
+                # Add heuristic cost for Flash query (~$0.001 -> ~₹0.08)
+                if "analysis" in res_json and "ai_insights" in res_json["analysis"]:
+                    res_json["analysis"]["ai_insights"]["query_cost_rupees"] = 0.08
+                
                 # Validate against the new mandatory schema
                 validated = LogisticsEngineResponse(**res_json)
                 return validated.dict()

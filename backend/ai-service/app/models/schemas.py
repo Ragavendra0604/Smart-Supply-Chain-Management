@@ -96,6 +96,7 @@ class EngineAiInsights(BaseModel):
     selection_reason: Optional[str] = None
     rejection_reason: Optional[str] = None
     future_disruptions: Optional[str] = None
+    query_cost_rupees: Optional[float] = 0.08
 
 class EngineAnalysis(BaseModel):
     route: Optional[RouteAnalysis] = None

@@ -289,6 +289,7 @@ class ShipmentAiInsight {
     this.selectionReason = '',
     this.rejectionReason = '',
     this.futureDisruptions = '',
+    this.queryCostRupees = 0.0,
   });
 
   final bool success;
@@ -304,6 +305,7 @@ class ShipmentAiInsight {
   final String selectionReason;
   final String rejectionReason;
   final String futureDisruptions;
+  final double queryCostRupees;
 
   factory ShipmentAiInsight.fromMap(Map<String, dynamic> data) {
     // Parse all_routes from the AI response for multi-route display
@@ -384,6 +386,9 @@ class ShipmentAiInsight {
           data['future_disruptions'] ??
               mapValue(data['analysis']?['ai_insights'])['future_disruptions'],
           fallback: ''),
+      queryCostRupees: numValue(data['query_cost_rupees'] ??
+              mapValue(data['analysis']?['ai_insights'])['query_cost_rupees'])
+          .toDouble(),
     );
   }
 }

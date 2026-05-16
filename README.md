@@ -1814,7 +1814,8 @@ This project was built as part of the **Google Cloud Solution Build 2026 Challen
 
 **Thank you to:**
 - Google Cloud team for excellent infrastructure and APIs
-- team members contributors and testers  
+- Community contributors and testers
+- All users providing feedback and suggestions
 
 ---
 
