@@ -37,7 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
 
     final controller = context.read<DashboardController>();
-    
+
     // CRITICAL FIX: Prevent infinite loop on empty dashboard
     if (controller.isBootstrapping) {
       Future.delayed(
@@ -121,9 +121,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }
 
           final isWide = MediaQuery.of(context).size.width > 900;
-          final content = isWide 
-            ? _buildWideLayout(context, controller) 
-            : _buildMobileLayout(context, controller);
+          final content = isWide
+              ? _buildWideLayout(context, controller)
+              : _buildMobileLayout(context, controller);
 
           return RefreshIndicator(
             onRefresh: controller.bootstrap,
@@ -152,7 +152,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMobileLayout(BuildContext context, DashboardController controller) {
+  Widget _buildMobileLayout(
+      BuildContext context, DashboardController controller) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -185,7 +186,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildWideLayout(BuildContext context, DashboardController controller) {
+  Widget _buildWideLayout(
+      BuildContext context, DashboardController controller) {
     return Padding(
       padding: const EdgeInsets.all(24.0),
       child: Row(
@@ -267,12 +269,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          'Recent Shipments',
-          style: AppTheme.light.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
+        Expanded(
+          child: Text(
+            'Recent Shipments',
+            overflow: TextOverflow.ellipsis,
+            style: AppTheme.light.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
+        const SizedBox(width: 8),
         TextButton.icon(
           onPressed: () {},
           icon: const Icon(Icons.filter_list, size: 18),
@@ -492,13 +498,17 @@ class _ShipmentCard extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    shipment.shipmentId,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                  Expanded(
+                    child: Text(
+                      shipment.shipmentId,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -531,7 +541,10 @@ class _ShipmentCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${shipment.origin} → ${shipment.destination}',
-                      style: const TextStyle(color: AppTheme.textSecondary),
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
                 ],
@@ -552,21 +565,26 @@ class _ShipmentCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('SPEED',
-                                style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w900,
-                                    color: AppTheme.textMuted,
-                                    letterSpacing: 0.5)),
-                            Text('${shipment.speedKmH.toStringAsFixed(0)} km/h',
-                                style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                    color: AppTheme.primary)),
-                          ],
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text('SPEED',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.textMuted,
+                                      letterSpacing: 0.5)),
+                              const SizedBox(width: 8),
+                              Text(
+                                  '${shipment.speedKmH.toStringAsFixed(0)} km/h',
+                                  style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: AppTheme.primary)),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 4),
                         ClipRRect(
@@ -586,7 +604,7 @@ class _ShipmentCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   Consumer<DashboardController>(
                     builder: (context, controller, _) {
                       final bool isSimulatingThis = controller.isSimulating &&
@@ -714,196 +732,204 @@ class _DeliverySummaryDialog extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 500),
         child: Padding(
           padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Delivery Intelligence',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        'Post-Arrival AI Performance Report',
-                        style: TextStyle(
-                          color: AppTheme.textMuted,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: gradeColor.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: gradeColor, width: 2),
-                    ),
-                    child: Center(
-                      child: Text(
-                        summary.performanceGrade,
-                        style: TextStyle(
-                          color: gradeColor,
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _SummaryRow(
-                      label: 'On-Time Status',
-                      value: summary.onTime ? 'ON TIME ✅' : 'DELAYED ⚠️',
-                      color: summary.onTime ? AppTheme.success : AppTheme.danger,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Delivery Intelligence',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Text(
+                            'Post-Arrival AI Performance Report',
+                            style: TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    const Divider(height: 24),
-                    _SummaryRow(
-                      label: 'Efficiency Rating',
-                      value: '${(summary.efficiencyRating * 100).toStringAsFixed(0)}%',
-                      color: AppTheme.primary,
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: gradeColor.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: gradeColor, width: 2),
+                      ),
+                      child: Center(
+                        child: Text(
+                          summary.performanceGrade,
+                          style: TextStyle(
+                            color: gradeColor,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
-              const Text(
-                'AI SUMMARY',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.0,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                summary.summary,
-                style: const TextStyle(height: 1.5, fontSize: 14),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'KEY INSIGHTS',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.0,
-                  color: AppTheme.textMuted,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...summary.keyInsights.map((insight) {
-                    final lowerInsight = insight.toLowerCase();
-                    final isNegative = lowerInsight.contains('degrad') ||
-                        lowerInsight.contains('zero') ||
-                        lowerInsight.contains('fail') ||
-                        lowerInsight.contains('missing') ||
-                        lowerInsight.contains('error') ||
-                        lowerInsight.contains('unavailable') ||
-                        lowerInsight.contains('no distance') ||
-                        lowerInsight.contains('no speed') ||
-                        lowerInsight.contains('maintenance') ||
-                        lowerInsight.contains('issue') ||
-                        lowerInsight.contains('flag');
-                    final isWarning = lowerInsight.contains('below') ||
-                        lowerInsight.contains('far') ||
-                        lowerInsight.contains('duration');
-
-                    final IconData iconData = isNegative
-                        ? Icons.cancel_outlined
-                        : (isWarning
-                            ? Icons.warning_amber_rounded
-                            : Icons.check_circle_outline);
-                    final Color iconColor = isNegative
-                        ? AppTheme.danger
-                        : (isWarning ? AppTheme.warning : AppTheme.success);
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        children: [
-                          Icon(iconData, size: 14, color: iconColor),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: Text(insight,
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      color: isNegative
-                                          ? AppTheme.danger
-                                          : null))),
-                        ],
-                      ),
-                    );
-                  }),
-              const SizedBox(height: 24),
-              if (summary.maintenanceFlag)
+                const SizedBox(height: 24),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.danger.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.danger.withValues(alpha: 0.2)),
+                    color: AppTheme.primary.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      const Icon(Icons.build_outlined, color: AppTheme.danger),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'MAINTENANCE REQUIRED',
-                              style: TextStyle(
-                                color: AppTheme.danger,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 11,
-                              ),
-                            ),
-                            Text(
-                              summary.maintenanceReason ?? 'Service inspection recommended.',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
+                      _SummaryRow(
+                        label: 'On-Time Status',
+                        value: summary.onTime ? 'ON TIME ✅' : 'DELAYED ⚠️',
+                        color:
+                            summary.onTime ? AppTheme.success : AppTheme.danger,
+                      ),
+                      const Divider(height: 24),
+                      _SummaryRow(
+                        label: 'Efficiency Rating',
+                        value:
+                            '${(summary.efficiencyRating * 100).toStringAsFixed(0)}%',
+                        color: AppTheme.primary,
                       ),
                     ],
                   ),
                 ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.all(16),
+                const SizedBox(height: 24),
+                const Text(
+                  'AI SUMMARY',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.0,
+                    color: AppTheme.textMuted,
                   ),
-                  child: const Text('Close Report'),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Text(
+                  summary.summary,
+                  style: const TextStyle(height: 1.5, fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'KEY INSIGHTS',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.0,
+                    color: AppTheme.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...summary.keyInsights.map((insight) {
+                  final lowerInsight = insight.toLowerCase();
+                  final isNegative = lowerInsight.contains('degrad') ||
+                      lowerInsight.contains('zero') ||
+                      lowerInsight.contains('fail') ||
+                      lowerInsight.contains('missing') ||
+                      lowerInsight.contains('error') ||
+                      lowerInsight.contains('unavailable') ||
+                      lowerInsight.contains('no distance') ||
+                      lowerInsight.contains('no speed') ||
+                      lowerInsight.contains('maintenance') ||
+                      lowerInsight.contains('issue') ||
+                      lowerInsight.contains('flag');
+                  final isWarning = lowerInsight.contains('below') ||
+                      lowerInsight.contains('far') ||
+                      lowerInsight.contains('duration');
+
+                  final IconData iconData = isNegative
+                      ? Icons.cancel_outlined
+                      : (isWarning
+                          ? Icons.warning_amber_rounded
+                          : Icons.check_circle_outline);
+                  final Color iconColor = isNegative
+                      ? AppTheme.danger
+                      : (isWarning ? AppTheme.warning : AppTheme.success);
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      children: [
+                        Icon(iconData, size: 14, color: iconColor),
+                        const SizedBox(width: 8),
+                        Expanded(
+                            child: Text(insight,
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color:
+                                        isNegative ? AppTheme.danger : null))),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 24),
+                if (summary.maintenanceFlag)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.danger.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: AppTheme.danger.withValues(alpha: 0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.build_outlined,
+                            color: AppTheme.danger),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'MAINTENANCE REQUIRED',
+                                style: TextStyle(
+                                  color: AppTheme.danger,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Text(
+                                summary.maintenanceReason ??
+                                    'Service inspection recommended.',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.all(16),
+                    ),
+                    child: const Text('Close Report'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -942,11 +968,14 @@ class _SummaryRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textSecondary,
+        Expanded(
+          child: Text(
+            label,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
           ),
         ),
         Text(

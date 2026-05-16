@@ -315,6 +315,7 @@ class DashboardController extends ChangeNotifier {
           final newAi = ShipmentAiInsight.fromMap(result['analysis']);
           latestShipment = latestShipment!.copyWith(
             ai: newAi,
+            simulationSpeedModifier: speedModifier,
             weather: latestShipment!.weather.copyWith(
               condition: weatherCondition,
             ),
@@ -509,10 +510,20 @@ class DashboardController extends ChangeNotifier {
     activeShipmentStream = stream;
     _activeShipmentSubscription = stream.listen(
       (shipment) {
-        latestShipment = shipment;
+        // Force clamp speed from backend/stream if it's unrealistic for the mode
+        double maxAllowed = 95.0; // Consistent with ROAD tactical limit
+        if (shipment.mode == 'AIR') maxAllowed = 800.0;
+        if (shipment.mode == 'SEA') maxAllowed = 40.0;
+        
+        if (shipment.speedKmH > maxAllowed) {
+          latestShipment = shipment.copyWith(speedKmH: maxAllowed * 0.9);
+        } else {
+          latestShipment = shipment;
+        }
+
         lastUpdated = DateTime.now();
         errorMessage = null;
-        _syncShipmentSummary(shipment);
+        _syncShipmentSummary(latestShipment!);
         notifyListeners();
       },
       onError: (e) {
@@ -527,11 +538,20 @@ class DashboardController extends ChangeNotifier {
         activeShipmentStream =
             _apiService.watchShipment(shipmentId).asBroadcastStream();
         _activeShipmentSubscription = activeShipmentStream!.listen(
-          (shipment) {
-            latestShipment = shipment;
+          (s) {
+            // Force clamp speed from backend/stream if it's unrealistic for the mode
+            double maxAllowed = 95.0;
+            if (s.mode == 'AIR') maxAllowed = 800.0;
+            if (s.mode == 'SEA') maxAllowed = 40.0;
+            
+            if (s.speedKmH > maxAllowed) {
+              latestShipment = s.copyWith(speedKmH: maxAllowed * 0.9);
+            } else {
+              latestShipment = s;
+            }
+
             lastUpdated = DateTime.now();
-            errorMessage = null;
-            _syncShipmentSummary(shipment);
+            _syncShipmentSummary(latestShipment!);
             notifyListeners();
           },
           onError: (_) {
@@ -563,7 +583,8 @@ class DashboardController extends ChangeNotifier {
       final currentPoint = shipment.currentLocation ?? shipment.route.path[0];
 
       // 1. Calculate base speed from route data (Distance / Duration)
-      final distanceMeters = LocationUtils.parseDistance(shipment.route.distance);
+      final distanceMeters =
+          LocationUtils.parseDistance(shipment.route.distance);
       final durationSeconds = LocationUtils.parseDuration(
           shipment.route.trafficDuration != '--'
               ? shipment.route.trafficDuration
@@ -571,9 +592,23 @@ class DashboardController extends ChangeNotifier {
 
       double calculatedSpeedKmH = (distanceMeters / durationSeconds) * 3.6;
 
-      // Sanitize speed for a truck (avoiding extremes if route data is sparse)
-      if (calculatedSpeedKmH < 30) calculatedSpeedKmH = 45.0;
-      if (calculatedSpeedKmH > 110) calculatedSpeedKmH = 85.0;
+      // Dynamic speed limits based on transport mode (Realistic limits)
+      double maxTacticalSpeed = 95.0; // Optimized for city/highway ROAD average
+      double minTacticalSpeed = 15.0;
+
+      if (shipment.mode == 'AIR') {
+        maxTacticalSpeed = 800.0;
+        minTacticalSpeed = 150.0;
+      } else if (shipment.mode == 'SEA') {
+        maxTacticalSpeed = 40.0;
+        minTacticalSpeed = 8.0;
+      }
+
+      // Sanitize speed (avoiding extremes if route data is sparse)
+      if (calculatedSpeedKmH < minTacticalSpeed)
+        calculatedSpeedKmH = minTacticalSpeed * 1.2;
+      if (calculatedSpeedKmH > maxTacticalSpeed)
+        calculatedSpeedKmH = maxTacticalSpeed * 0.9;
 
       // 2. Apply dynamic environmental modifiers
       double modifier = 1.0;
@@ -582,8 +617,9 @@ class DashboardController extends ChangeNotifier {
       final weather = shipment.weather.condition.toLowerCase();
       if (weather.contains('rain') ||
           weather.contains('snow') ||
-          weather.contains('storm')) {
-        modifier *= 0.75; // Slow down for bad weather
+          weather.contains('storm') ||
+          weather.contains('fog')) {
+        modifier *= 0.75; // Slow down for bad weather/visibility
       }
 
       // Risk/Safety impact
@@ -592,9 +628,10 @@ class DashboardController extends ChangeNotifier {
       }
 
       // Final dynamic speed
+      // Final dynamic speed (clamped for realism)
       final double injectedModifier = shipment.simulationSpeedModifier ?? 1.0;
       final double targetSpeedKmH =
-          (calculatedSpeedKmH * modifier * injectedModifier);
+          (calculatedSpeedKmH * modifier * injectedModifier).clamp(0.0, maxTacticalSpeed * 1.1);
 
       final double intervalSeconds =
           AppConfig.simulationStepInterval.inMilliseconds / 1000.0;
@@ -625,8 +662,12 @@ class DashboardController extends ChangeNotifier {
       }
 
       _simulationIndex = nextIndex;
-      final isDestination = _simulationIndex >= shipment.route.path.length - 1 &&
-          distanceToCover >= 0;
+      final isDestination = _simulationIndex >= shipment.route.path.length - 1;
+
+      // CRITICAL: Snap to exact destination if close enough or reached
+      if (isDestination) {
+        nextPoint = shipment.route.path.last;
+      }
 
       final updatedShipment = shipment.copyWith(
         currentLocation: nextPoint,
@@ -659,6 +700,7 @@ class DashboardController extends ChangeNotifier {
             if (activeShipmentId == targetId) {
               latestShipment = latestShipment!.copyWith(
                 status: 'DELIVERED',
+                currentLocation: shipment.route.path.last, // Ensure final snap
                 deliverySummary: DeliverySummary.fromMap(summaryData),
               );
               _syncShipmentSummary(latestShipment!);

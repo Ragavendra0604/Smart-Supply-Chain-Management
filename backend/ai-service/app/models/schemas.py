@@ -92,6 +92,10 @@ class EngineAiInsights(BaseModel):
     confidence: Optional[float] = 1.0
     bottlenecks: Optional[List[str]] = []
     recommendation: Optional[str] = "Proceed normally."
+    comparative_analysis: Optional[List[str]] = []
+    selection_reason: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    future_disruptions: Optional[str] = None
 
 class EngineAnalysis(BaseModel):
     route: Optional[RouteAnalysis] = None
@@ -129,7 +133,7 @@ class DeliverySummaryRequest(BaseModel):
     delays_mins: Optional[float] = 0.0
     news_disruptions: Optional[int] = 0
     is_simulation: Optional[bool] = True
-    model_name: Optional[str] = "gemini-2.5-flash"
+    model_name: Optional[str] = "gemini-1.5-flash"
 
 
 class DeliverySummaryResponse(BaseModel):

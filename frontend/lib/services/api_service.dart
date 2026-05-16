@@ -211,8 +211,7 @@ class ApiService {
     String priority = 'NORMAL',
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}/create-shipment');
-    print(
-        '[API] POST /create-shipment - Payload: {shipment_id: $shipmentId, origin: $origin, destination: $destination, mode: $mode}');
+
 
     try {
       final response = await _client.post(
@@ -227,8 +226,7 @@ class ApiService {
         }),
       );
 
-      print('[API] POST /create-shipment - Status: ${response.statusCode}');
-      print('[API] POST /create-shipment - Response: ${response.body}');
+
 
       if (response.statusCode >= 400) {
         // Parse error response
@@ -248,7 +246,7 @@ class ApiService {
         }
       }
     } catch (e) {
-      print('[API] POST /create-shipment - Error: $e');
+
       rethrow;
     }
   }

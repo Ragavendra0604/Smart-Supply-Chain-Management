@@ -35,105 +35,140 @@ class OptimizationScreen extends StatelessWidget {
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: controller.isRefreshingAi
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppTheme.primary),
+                  )
+                : const Icon(Icons.refresh_rounded),
+            tooltip: 'Re-run AI Analysis',
+            onPressed: controller.isRefreshingAi
+                ? null
+                : () => controller.analyzeActiveShipment(),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
-          child: content,
-        ),
-      ),
+      body: content,
     );
   }
 
   Widget _buildMobileLayout(BuildContext context, Shipment currentShipment,
       ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _Header(shipment: currentShipment),
-          const SizedBox(height: 24),
-          _RiskBanner(shipment: currentShipment),
-          const SizedBox(height: 24),
-          if (opt != null) ...[
-            _ComparisonSection(opt: opt, shipment: currentShipment),
-            const SizedBox(height: 24),
-          ],
-          if (allRoutes.isNotEmpty) ...[
-            _AllRoutesSection(routes: allRoutes),
-            const SizedBox(height: 24),
-          ],
-          _AiReasoning(
-            explanation: currentShipment.ai.explanation,
-            suggestion: currentShipment.ai.suggestion,
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1400),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _Header(shipment: currentShipment),
+                const SizedBox(height: 24),
+                _RiskBanner(shipment: currentShipment),
+                const SizedBox(height: 24),
+                if (opt != null) ...[
+                  _ComparisonSection(opt: opt, shipment: currentShipment),
+                  const SizedBox(height: 24),
+                ],
+                if (allRoutes.isNotEmpty) ...[
+                  _AllRoutesSection(routes: allRoutes),
+                  const SizedBox(height: 24),
+                ],
+                _AiReasoning(
+                  explanation: currentShipment.ai.explanation,
+                  suggestion: currentShipment.ai.suggestion,
+                  allRoutes: allRoutes,
+                  comparativeAnalysis: currentShipment.ai.comparativeAnalysis,
+                  selectionReason: currentShipment.ai.selectionReason,
+                  rejectionReason: currentShipment.ai.rejectionReason,
+                  futureDisruptions: currentShipment.ai.futureDisruptions,
+                ),
+                const SizedBox(height: 24),
+                if (currentShipment.news.isNotEmpty)
+                  _NewsSection(news: currentShipment.news),
+                const SizedBox(height: 24),
+                _WhatIfSimulator(shipment: currentShipment),
+                const SizedBox(height: 24),
+                _ActionButtons(shipment: currentShipment),
+                const SizedBox(height: 40), // Safe area at bottom
+              ],
+            ),
           ),
-          const SizedBox(height: 24),
-          if (currentShipment.news.isNotEmpty)
-            _NewsSection(news: currentShipment.news),
-          const SizedBox(height: 24),
-          _WhatIfSimulator(shipment: currentShipment),
-          const SizedBox(height: 24),
-          _ActionButtons(shipment: currentShipment),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildWideLayout(BuildContext context, Shipment currentShipment,
       ShipmentOptimizationData? opt, List<Map<String, dynamic>> allRoutes) {
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Main Column: Reasoning & Comparison
-          Expanded(
-            flex: 3,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _Header(shipment: currentShipment),
-                  const SizedBox(height: 24),
-                  _RiskBanner(shipment: currentShipment),
-                  const SizedBox(height: 24),
-                  if (opt != null) ...[
-                    _ComparisonSection(opt: opt, shipment: currentShipment),
-                    const SizedBox(height: 24),
-                  ],
-                  _AiReasoning(
-                    explanation: currentShipment.ai.explanation,
-                    suggestion: currentShipment.ai.suggestion,
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1400),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch, // IMPORTANT for independent scroll
+            children: [
+              // Main Column: Reasoning & Comparison
+              Expanded(
+                flex: 3,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _Header(shipment: currentShipment),
+                      const SizedBox(height: 24),
+                      _RiskBanner(shipment: currentShipment),
+                      const SizedBox(height: 24),
+                      if (opt != null) ...[
+                        _ComparisonSection(opt: opt, shipment: currentShipment),
+                        const SizedBox(height: 24),
+                      ],
+                      _AiReasoning(
+                        explanation: currentShipment.ai.explanation,
+                        suggestion: currentShipment.ai.suggestion,
+                        allRoutes: allRoutes,
+                        comparativeAnalysis: currentShipment.ai.comparativeAnalysis,
+                        selectionReason: currentShipment.ai.selectionReason,
+                        rejectionReason: currentShipment.ai.rejectionReason,
+                        futureDisruptions: currentShipment.ai.futureDisruptions,
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-          const SizedBox(width: 32),
-          // Sidebar: Routes, News & Actions
-          Expanded(
-            flex: 2,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (allRoutes.isNotEmpty) ...[
-                    _AllRoutesSection(routes: allRoutes),
-                    const SizedBox(height: 24),
-                  ],
-                  if (currentShipment.news.isNotEmpty) ...[
-                    _NewsSection(news: currentShipment.news),
-                    const SizedBox(height: 24),
-                  ],
-                  _WhatIfSimulator(shipment: currentShipment),
-                  const SizedBox(height: 24),
-                  _ActionButtons(shipment: currentShipment),
-                ],
+              const SizedBox(width: 32),
+              // Sidebar: Routes, News & Actions
+              Expanded(
+                flex: 2,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (allRoutes.isNotEmpty) ...[
+                        _AllRoutesSection(routes: allRoutes),
+                        const SizedBox(height: 24),
+                      ],
+                      if (currentShipment.news.isNotEmpty) ...[
+                        _NewsSection(news: currentShipment.news),
+                        const SizedBox(height: 24),
+                      ],
+                      _WhatIfSimulator(shipment: currentShipment),
+                      const SizedBox(height: 24),
+                      _ActionButtons(shipment: currentShipment),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -162,53 +197,70 @@ class _Header extends StatelessWidget {
             const Icon(Icons.location_on_outlined,
                 size: 14, color: AppTheme.textSecondary),
             const SizedBox(width: 4),
-            Text(
-              '${shipment.origin} → ${shipment.destination}',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: Text(
+                '${shipment.origin} → ${shipment.destination}',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ),
             if (shipment.speedKmH > 0) ...[
-              const Spacer(),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Text('LIVE SPEED',
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                                color: AppTheme.textMuted,
-                                letterSpacing: 0.5)),
-                        const SizedBox(width: 8),
-                        Text('${shipment.speedKmH.toStringAsFixed(0)} km/h',
-                            style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: AppTheme.primary)),
-                      ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Text('LIVE SPEED',
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.textMuted,
+                                  letterSpacing: 0.5)),
+                          const SizedBox(width: 8),
+                          Text('${shipment.speedKmH.toStringAsFixed(0)} km/h',
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w900,
+                                  color: AppTheme.primary)),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 6),
-                    SizedBox(
-                      width: 120,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: LinearProgressIndicator(
-                          value: (shipment.speedKmH / 120).clamp(0.0, 1.0),
-                          backgroundColor:
-                              AppTheme.primary.withValues(alpha: 0.1),
-                          color: shipment.speedKmH > 90
-                              ? AppTheme.danger
-                              : (shipment.speedKmH > 70
-                                  ? AppTheme.warning
-                                  : AppTheme.primary),
-                          minHeight: 6,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: SizedBox(
+                        width: 120,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: (shipment.speedKmH /
+                                    (shipment.mode == 'AIR'
+                                        ? 900
+                                        : (shipment.mode == 'SEA' ? 50 : 120)))
+                                .clamp(0.0, 1.0),
+                            backgroundColor:
+                                AppTheme.primary.withValues(alpha: 0.1),
+                            color: (shipment.mode == 'ROAD' &&
+                                        shipment.speedKmH > 90) ||
+                                    (shipment.mode == 'AIR' &&
+                                        shipment.speedKmH > 800)
+                                ? AppTheme.danger
+                                : (shipment.speedKmH > 70
+                                    ? AppTheme.warning
+                                    : AppTheme.primary),
+                            minHeight: 6,
+                          ),
                         ),
                       ),
                     ),
@@ -286,42 +338,47 @@ class _RiskBanner extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Consumer<DashboardController>(
-              builder: (context, controller, _) {
-                final opt = shipment.ai.optimization;
-                String displayDelay = '+$delay';
-                
-                if (opt != null) {
-                  try {
-                    final double b = LocationUtils.parseDuration(opt.before.time);
-                    final double a = LocationUtils.parseDuration(opt.after.time);
-                    final int diffMin = ((b - a) / 60).round();
-                    if (diffMin == 0) {
-                      displayDelay = '±0 min';
-                    } else {
-                      final absDiff = diffMin.abs();
-                      displayDelay = '${diffMin > 0 ? '-' : '+'}$absDiff min${absDiff == 1 ? '' : 's'}';
-                    }
-                  } catch (_) {}
-                } else if (delay == '0 mins' || delay == '0') {
-                  displayDelay = '±0 min';
-                }
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Consumer<DashboardController>(
+                builder: (context, controller, _) {
+                  final opt = shipment.ai.optimization;
+                  String displayDelay = '+$delay';
 
-                return Text(
-                  displayDelay,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 12,
-                  ),
-                );
-              },
+                  if (opt != null) {
+                    try {
+                      final double b =
+                          LocationUtils.parseDuration(opt.before.time);
+                      final double a =
+                          LocationUtils.parseDuration(opt.after.time);
+                      final int diffMin = ((b - a) / 60).round();
+                      if (diffMin == 0) {
+                        displayDelay = '±0 min';
+                      } else {
+                        final absDiff = diffMin.abs();
+                        displayDelay =
+                            '${diffMin > 0 ? '-' : '+'}$absDiff min${absDiff == 1 ? '' : 's'}';
+                      }
+                    } catch (_) {}
+                  } else if (delay == '0 mins' || delay == '0') {
+                    displayDelay = '±0 min';
+                  }
+
+                  return Text(
+                    displayDelay,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12,
+                    ),
+                  );
+                },
+              ),
             ),
           ),
         ],
@@ -366,11 +423,11 @@ class _ComparisonSection extends StatelessWidget {
         const SizedBox(height: 12),
         _MetricRow(
           label: 'Estimated Cost',
-          before: '\$${opt.before.cost.toStringAsFixed(2)}',
-          after: '\$${opt.after.cost.toStringAsFixed(2)}',
+          before: '₹${opt.before.cost.toStringAsFixed(2)}',
+          after: '₹${opt.after.cost.toStringAsFixed(2)}',
           icon: Icons.payments_outlined,
           savingLabel: costSaved != 0
-              ? '${costSaved > 0 ? '-' : '+'}\$${costSaved.abs().toStringAsFixed(2)}'
+              ? '${costSaved > 0 ? '-' : '+'}${'₹'}${costSaved.abs().toStringAsFixed(2)}'
               : null,
           isSaving: costSaved > 0,
         ),
@@ -440,40 +497,43 @@ class _MetricRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(icon, size: 16, color: AppTheme.textSecondary),
-                  const SizedBox(width: 8),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
+              Icon(icon, size: 16, color: AppTheme.textSecondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ],
+                ),
               ),
-              if (savingLabel != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: (isSaving ? AppTheme.success : AppTheme.danger)
-                        .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    savingLabel!,
-                    style: TextStyle(
-                      color: isSaving ? AppTheme.success : AppTheme.danger,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
+              if (savingLabel != null) ...[
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: (isSaving ? AppTheme.success : AppTheme.danger)
+                          .withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      savingLabel!,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: isSaving ? AppTheme.success : AppTheme.danger,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                 ),
+              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -658,7 +718,9 @@ class _AllRoutesSection extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${r['distance_km'] ?? 0} km  •  ${r['travel_time_min'] ?? 0} min${(r['travel_time_min'] ?? 0) == 1 ? '' : 's'}  •  \$${r['total_cost'] ?? 0}',
+                        '${(r['distance_km'] is num ? (r['distance_km'] as num).toStringAsFixed(1) : (r['distance_km'] ?? 0))} km  •  '
+                        '${(r['travel_time_min'] is num ? (r['travel_time_min'] as num).toStringAsFixed(1) : (r['travel_time_min'] ?? 0))} min  •  '
+                        '₹${(r['total_cost'] is num ? (r['total_cost'] as num).toStringAsFixed(2) : (r['total_cost'] ?? 0))}',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 11,
@@ -695,7 +757,143 @@ class _AllRoutesSection extends StatelessWidget {
 class _AiReasoning extends StatelessWidget {
   final String explanation;
   final String suggestion;
-  const _AiReasoning({required this.explanation, required this.suggestion});
+  final List<Map<String, dynamic>> allRoutes;
+  final List<String> comparativeAnalysis;
+  final String selectionReason;
+  final String rejectionReason;
+  final String futureDisruptions;
+
+  const _AiReasoning({
+    required this.explanation,
+    required this.suggestion,
+    required this.allRoutes,
+    this.comparativeAnalysis = const [],
+    this.selectionReason = '',
+    this.rejectionReason = '',
+    this.futureDisruptions = '',
+  });
+
+  Widget _buildComparisonTable(List<Map<String, dynamic>> routes) {
+    // Only compare top 3 routes to keep it concise
+    final topRoutes = routes.take(3).toList();
+
+    return Column(
+      children: [
+        // Table Header
+        Row(
+          children: [
+            const Expanded(flex: 3, child: SizedBox()),
+            _tableHeaderCell('TIME'),
+            _tableHeaderCell('COST'),
+            _tableHeaderCell('RISK'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Divider(height: 1),
+        ...topRoutes.asMap().entries.map((entry) {
+          final i = entry.key;
+          final r = entry.value;
+          final isBest = i == 0;
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            r['summary']?.split('/')[0] ?? 'Route ${i + 1}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight:
+                                  isBest ? FontWeight.bold : FontWeight.w500,
+                              color: isBest
+                                  ? AppTheme.primary
+                                  : AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (isBest)
+                            const Text(
+                              'Optimized Choice',
+                              style: TextStyle(
+                                  fontSize: 9,
+                                  color: AppTheme.success,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                        ],
+                      ),
+                    ),
+                    _tableValueCell(
+                      '${(r['travel_time_min'] is num ? (r['travel_time_min'] as num).toStringAsFixed(1) : (r['travel_time_min'] ?? 0))}m',
+                      isBest),
+                    _tableValueCell(
+                      '₹${(r['total_cost'] is num ? (r['total_cost'] as num).toStringAsFixed(2) : (r['total_cost'] ?? 0))}',
+                      isBest),
+                    _tableValueCell(
+                      (r['risk_level'] ?? 'LOW').toString().toUpperCase(),
+                      isBest,
+                      color: _getRiskColor(r['risk_level'] ?? 'LOW'),
+                    ),
+                  ],
+                ),
+              ),
+              if (i < topRoutes.length - 1) const Divider(height: 1),
+            ],
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _tableHeaderCell(String label) {
+    return Expanded(
+      flex: 2,
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w900,
+          color: AppTheme.textMuted,
+        ),
+      ),
+    );
+  }
+
+  Widget _tableValueCell(String value, bool isBest, {Color? color}) {
+    return Expanded(
+      flex: 2,
+      child: Text(
+        value,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isBest ? FontWeight.bold : FontWeight.w500,
+          color: color ?? (isBest ? AppTheme.primary : AppTheme.textSecondary),
+        ),
+      ),
+    );
+  }
+
+  Color _getRiskColor(String level) {
+    switch (level.toUpperCase()) {
+      case 'HIGH':
+        return AppTheme.danger;
+      case 'MEDIUM':
+        return AppTheme.warning;
+      case 'LOW':
+        return AppTheme.success;
+      default:
+        return AppTheme.textMuted;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -711,14 +909,15 @@ class _AiReasoning extends StatelessWidget {
         children: [
           const Row(
             children: [
-              Icon(Icons.auto_awesome, color: AppTheme.primary, size: 20),
-              SizedBox(width: 8),
+              Icon(Icons.auto_awesome, color: AppTheme.primary, size: 24),
+              SizedBox(width: 12),
               Text(
-                'AI Reasoning & Recommendation',
+                'AI Tactical Reasoning',
                 style: TextStyle(
                   color: AppTheme.primary,
                   fontWeight: FontWeight.w900,
-                  fontSize: 16,
+                  fontSize: 20,
+                  letterSpacing: -0.5,
                 ),
               ),
             ],
@@ -728,7 +927,7 @@ class _AiReasoning extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFDDE7F5), // Light blue from image
+                color: const Color(0xFFDDE7F5),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -740,9 +939,9 @@ class _AiReasoning extends StatelessWidget {
                     child: Text(
                       suggestion,
                       style: const TextStyle(
-                        color: Color(0xFF1A3B70), // Darker blue for contrast
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF1A3B70),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
                         height: 1.4,
                       ),
                     ),
@@ -752,6 +951,16 @@ class _AiReasoning extends StatelessWidget {
             ),
           ],
           if (explanation.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Text(
+              'STRATEGIC INSIGHTS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+                color: AppTheme.textMuted,
+              ),
+            ),
             const SizedBox(height: 12),
             Text(
               explanation,
@@ -762,8 +971,63 @@ class _AiReasoning extends StatelessWidget {
                 fontWeight: FontWeight.w500,
               ),
             ),
+            if (comparativeAnalysis.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              ...comparativeAnalysis.map((reason) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('• ',
+                            style: TextStyle(
+                                color: AppTheme.primary,
+                                fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text(
+                            reason,
+                            style: const TextStyle(
+                                fontSize: 13, color: AppTheme.textSecondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+            const SizedBox(height: 20),
+            if (selectionReason.isNotEmpty)
+              _ReasoningSection(
+                title: 'SELECTION PATH ANALYSIS',
+                content: selectionReason,
+                icon: Icons.alt_route_rounded,
+              ),
+            if (rejectionReason.isNotEmpty)
+              _ReasoningSection(
+                title: 'ALTERNATIVE PATH REJECTION',
+                content: rejectionReason,
+                icon: Icons.do_not_disturb_on_outlined,
+              ),
+            if (futureDisruptions.isNotEmpty)
+              _ReasoningSection(
+                title: 'FUTURE DISRUPTION FORECAST',
+                content: futureDisruptions,
+                icon: Icons.event_busy_outlined,
+              ),
           ],
-          if (explanation.isEmpty && suggestion.isEmpty)
+          if (allRoutes.length > 1) ...[
+            const SizedBox(height: 24),
+            const Text(
+              'ROUTE COMPARISON ANALYSIS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.2,
+                color: AppTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildComparisonTable(allRoutes),
+          ],
+          if (explanation.isEmpty && suggestion.isEmpty) ...[
             const Text(
               'Run AI analysis to get route optimization recommendations.',
               style: TextStyle(
@@ -772,6 +1036,37 @@ class _AiReasoning extends StatelessWidget {
                 fontStyle: FontStyle.italic,
               ),
             ),
+            const SizedBox(height: 16),
+            Consumer<DashboardController>(
+              builder: (context, controller, _) => SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: controller.isRefreshingAi
+                      ? null
+                      : () => controller.analyzeActiveShipment(),
+                  icon: controller.isRefreshingAi
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.primary,
+                          ),
+                        )
+                      : const Icon(Icons.auto_awesome),
+                  label: const Text('RUN AI ANALYSIS'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1046,15 +1341,18 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
     // We use a representative 60-min base for this pre-AI estimate.
     const double baseMinutes = 60.0;
     double delayMins = baseMinutes * (_trafficLevel * 1.2);
-    if (_weather.toLowerCase().contains('storm')) delayMins += 20.0 + (baseMinutes * 0.4);
-    if (_weather.toLowerCase().contains('rain') || _weather.toLowerCase().contains('fog')) {
+    if (_weather.toLowerCase().contains('storm'))
+      delayMins += 20.0 + (baseMinutes * 0.4);
+    if (_weather.toLowerCase().contains('rain') ||
+        _weather.toLowerCase().contains('fog')) {
       delayMins += 5.0 + (baseMinutes * 0.15);
     }
     // Speed modifier: reduced speed means more time
     if (_speedModifier < 1.0 && _speedModifier > 0) {
       delayMins += baseMinutes * (1.0 / _speedModifier - 1.0);
     } else if (_speedModifier > 1.0) {
-      delayMins += baseMinutes * (1.0 / _speedModifier - 1.0); // negative, saves time
+      delayMins +=
+          baseMinutes * (1.0 / _speedModifier - 1.0); // negative, saves time
     }
 
     setState(() {
@@ -1213,21 +1511,24 @@ class _WhatIfSimulatorState extends State<_WhatIfSimulator> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          _isInjecting
-                              ? 'WAITING FOR AI ANALYSIS...'
-                              : (_useHeuristics
-                                  ? 'HEURISTIC ESTIMATE'
-                                  : 'AI PREDICTION (2.5 FLASH)'),
-                          style: TextStyle(
-                            color: _isInjecting
-                                ? AppTheme.warning
+                        Expanded(
+                          child: Text(
+                            _isInjecting
+                                ? 'WAITING FOR AI ANALYSIS...'
                                 : (_useHeuristics
-                                    ? AppTheme.textMuted
-                                    : AppTheme.success),
-                            fontSize: 9,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1,
+                                    ? 'HEURISTIC ESTIMATE'
+                                    : 'AI PREDICTION (1.5 FLASH)'),
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: _isInjecting
+                                  ? AppTheme.warning
+                                  : (_useHeuristics
+                                      ? AppTheme.textMuted
+                                      : AppTheme.success),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                         if (!_useHeuristics && !_isInjecting)
@@ -1383,3 +1684,62 @@ class _SimResult extends StatelessWidget {
     );
   }
 }
+
+class _ReasoningSection extends StatelessWidget {
+  final String title;
+  final String content;
+  final IconData icon;
+
+  const _ReasoningSection({
+    required this.title,
+    required this.content,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 16, color: AppTheme.primary),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.2,
+                  color: AppTheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppTheme.primary.withValues(alpha: 0.1)),
+            ),
+            child: Text(
+              content,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                height: 1.5,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

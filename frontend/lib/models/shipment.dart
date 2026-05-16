@@ -21,6 +21,7 @@ class Shipment {
     this.currentStepIndex = 0,
     this.simulationSpeedModifier = 1.0,
     this.deliverySummary,
+    this.mode = 'ROAD',
   });
 
   final String id;
@@ -39,6 +40,7 @@ class Shipment {
   final int currentStepIndex;
   final double? simulationSpeedModifier;
   final DeliverySummary? deliverySummary;
+  final String mode;
 
   Shipment copyWith({
     String? id,
@@ -57,6 +59,7 @@ class Shipment {
     int? currentStepIndex,
     double? simulationSpeedModifier,
     DeliverySummary? deliverySummary,
+    String? mode,
   }) {
     return Shipment(
       id: id ?? this.id,
@@ -76,6 +79,7 @@ class Shipment {
       simulationSpeedModifier:
           simulationSpeedModifier ?? this.simulationSpeedModifier,
       deliverySummary: deliverySummary ?? this.deliverySummary,
+      mode: mode ?? this.mode,
     );
   }
 
@@ -111,12 +115,12 @@ class Shipment {
 
     for (var i = 0; i < route.path.length; i++) {
       final point = route.path[i];
-      
+
       // Skip invalid route points
       if (point.latitude == 0.0 && point.longitude == 0.0) continue;
-      
-      final distance = (point.latitude - curLat).abs() +
-          (point.longitude - curLng).abs();
+
+      final distance =
+          (point.latitude - curLat).abs() + (point.longitude - curLng).abs();
 
       if (distance < bestDistance) {
         bestDistance = distance;
@@ -131,8 +135,9 @@ class Shipment {
     if (route.path.isEmpty) return 'Waiting for route';
 
     final progress = currentRouteIndex / route.path.length;
-    if (progress < 0.20)
+    if (progress < 0.20) {
       return origin.isNotEmpty ? '$origin corridor' : 'Origin corridor';
+    }
     if (progress < 0.45) return 'En route';
     if (progress < 0.70) return 'Mid route';
     if (progress < 0.90) return 'Approaching destination';
@@ -176,6 +181,7 @@ class Shipment {
       deliverySummary: data['delivery_summary'] != null
           ? DeliverySummary.fromMap(mapValue(data['delivery_summary']))
           : null,
+      mode: stringValue(data['mode'], fallback: 'ROAD').toUpperCase(),
     );
   }
 }
@@ -279,6 +285,10 @@ class ShipmentAiInsight {
     this.optimization,
     this.allRoutes = const [],
     this.reasoningTimestamp,
+    this.comparativeAnalysis = const [],
+    this.selectionReason = '',
+    this.rejectionReason = '',
+    this.futureDisruptions = '',
   });
 
   final bool success;
@@ -290,6 +300,10 @@ class ShipmentAiInsight {
   final ShipmentOptimizationData? optimization;
   final List<Map<String, dynamic>> allRoutes;
   final DateTime? reasoningTimestamp;
+  final List<String> comparativeAnalysis;
+  final String selectionReason;
+  final String rejectionReason;
+  final String futureDisruptions;
 
   factory ShipmentAiInsight.fromMap(Map<String, dynamic> data) {
     // Parse all_routes from the AI response for multi-route display
@@ -314,11 +328,13 @@ class ShipmentAiInsight {
     } else if (data['risk_score'] is String) {
       // If it's a string like "HIGH", score it appropriately as a fallback
       final s = data['risk_score'].toString().toUpperCase();
-      if (s == 'HIGH')
+      if (s == 'HIGH') {
         rawScore = 0.8;
-      else if (s == 'MEDIUM')
+      } else if (s == 'MEDIUM') {
         rawScore = 0.5;
-      else if (s == 'LOW') rawScore = 0.1;
+      } else if (s == 'LOW') {
+        rawScore = 0.1;
+      }
     }
 
     String rLevel = stringValue(data['risk_level'], fallback: '');
@@ -351,6 +367,23 @@ class ShipmentAiInsight {
           : null,
       allRoutes: allRoutes,
       reasoningTimestamp: dateTimeFromDynamic(data['reasoning_timestamp']),
+      comparativeAnalysis: listValue(data['comparative_analysis'] ??
+              mapValue(
+                  data['analysis']?['ai_insights'])['comparative_analysis'])
+          .map((e) => e.toString())
+          .toList(),
+      selectionReason: stringValue(
+          data['selection_reason'] ??
+              mapValue(data['analysis']?['ai_insights'])['selection_reason'],
+          fallback: ''),
+      rejectionReason: stringValue(
+          data['rejection_reason'] ??
+              mapValue(data['analysis']?['ai_insights'])['rejection_reason'],
+          fallback: ''),
+      futureDisruptions: stringValue(
+          data['future_disruptions'] ??
+              mapValue(data['analysis']?['ai_insights'])['future_disruptions'],
+          fallback: ''),
     );
   }
 }
@@ -425,7 +458,8 @@ class DeliverySummary {
       efficiencyRating: numValue(data['efficiency_rating']),
       performanceGrade: stringValue(data['performance_grade'], fallback: 'N/A'),
       summary: stringValue(data['summary'], fallback: ''),
-      keyInsights: listValue(data['key_insights']).map((e) => e.toString()).toList(),
+      keyInsights:
+          listValue(data['key_insights']).map((e) => e.toString()).toList(),
       maintenanceFlag: data['maintenance_flag'] == true,
       maintenanceReason: (data['maintenance_reason'] != null &&
               data['maintenance_reason'].toString().isNotEmpty)

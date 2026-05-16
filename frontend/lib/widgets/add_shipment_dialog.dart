@@ -126,7 +126,7 @@ class _AddShipmentDialogState extends State<AddShipmentDialog> {
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedMode,
+                        initialValue: _selectedMode,
                         decoration: _inputDecoration('Transport Mode', ''),
                         items: const [
                           DropdownMenuItem(value: 'ROAD', child: Text('Road')),
@@ -139,7 +139,7 @@ class _AddShipmentDialogState extends State<AddShipmentDialog> {
                     const SizedBox(width: 16),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedPriority,
+                        initialValue: _selectedPriority,
                         decoration: _inputDecoration('Priority', ''),
                         items: const [
                           DropdownMenuItem(

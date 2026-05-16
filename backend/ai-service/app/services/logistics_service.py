@@ -31,7 +31,7 @@ class InputData(BaseModel):
     speed_modifier: Optional[float] = 1.0
     current_speed: Optional[float] = 0.0
     is_simulation: Optional[bool] = True
-    model_name: Optional[str] = "gemini-2.5-flash"
+    model_name: Optional[str] = "gemini-1.5-flash"
 
 def get_ml_delay_prediction(route: Dict[str, Any], weather: Dict[str, Any], mode: str = "ROAD", 
                              traffic_level: float = 0.0, speed_modifier: float = 1.0) -> float:
@@ -324,6 +324,11 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
             - REROUTE -> risk > 0.6 or major bottlenecks
             - IMPORTANT: If Heuristic Risk is > 0.6, the decision MUST NOT be "GO".
 
+            EXPLAINABILITY REQUIREMENTS (MANDATORY):
+            - selection_reason: Provide a clear, data-driven explanation of why the chosen path is superior.
+            - rejection_reason: Explicitly state why alternative routes were rejected (e.g., higher risk, cost, or weather impact).
+            - future_disruptions: Predict potential upcoming disruptions based on weather trends, traffic patterns, and news signals.
+
             OUTPUT SCHEMA (STRICT JSON ONLY):
             {{
                 "success": true,
@@ -335,7 +340,16 @@ def generate_logistics_insight(risk_score: float, predicted_delay: str, data: In
                     "costing": {{ "base_cost": number, "fuel_cost": number, "total_cost": number }},
                     "time": {{ "estimated_minutes": number, "delay_minutes": number, "delay_probability": 0–1 }},
                     "risk": {{ "score": 0–1, "level": "LOW|MEDIUM|HIGH", "factors": {{ "traffic": number, "weather": number, "route": number }} }},
-                    "ai_insights": {{ "decision": "GO|HOLD|REROUTE", "confidence": 0–1, "bottlenecks": [], "recommendation": "clear actionable instruction" }}
+                    "ai_insights": {{
+                        "decision": "GO|HOLD|REROUTE",
+                        "confidence": 0-1,
+                        "bottlenecks": [],
+                        "recommendation": "clear actionable instruction",
+                        "comparative_analysis": ["Detailed reason why Route X was chosen over Y", "Risk/Cost trade-off analysis"],
+                        "selection_reason": "Clear explanation of why this specific path was chosen.",
+                        "rejection_reason": "Why other available paths were not selected.",
+                        "future_disruptions": "Analysis of what potential disruptions might occur in the near future for this route."
+                    }}
                 }}
             }}
             """
@@ -534,7 +548,7 @@ OUTPUT SCHEMA (JSON ONLY, NO EXTRA TEXT):
   "next_shipment_recommendation": "..."
 }}
 """
-        model_name = req.model_name or "gemini-2.5-flash"
+        model_name = req.model_name or "gemini-1.5-flash"
         response = client.models.generate_content(
             model=model_name,
             contents=prompt,
